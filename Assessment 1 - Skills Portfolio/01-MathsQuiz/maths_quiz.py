@@ -6,6 +6,8 @@ from tkinter import messagebox
 WINDOW_TITLE = "Maths Quiz"
 WINDOW_SIZE = "500x400"
 TOTAL_QUESTIONS = 10
+#Difficulty levels: number -> label shown on the button
+DIFFICULTY_LEVELS = {1: "Easy", 2:"Moderate", 3:"Advanced"}
 
 class MathsQuiz:
 
@@ -25,10 +27,31 @@ class MathsQuiz:
         self.operation = "+"
         self.correct_answer = 0
 
-        self.placeholder = tk.Label(
-            self.root, text="Maths Quiz", font=("Arial", 24, "bold")
-        )
-        self.placeholder.pack(pady=100)
+        self.displayMenu()
+
+    def clearWindow(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+    def displayMenu(self):
+        self.clearWindow()
+
+        tk.Label(self.root, text="Maths Quiz", font=("Arial", 24, "bold")).pack(pady=(30, 10))
+
+        tk.Label(self.root, text="DIFFICULTY LEVEL", font=("Arial", 14)).pack(pady=(0, 20))
+
+    for level, name in DIFFICULTY_LEVELS.items():
+        tk.Button(self.root, text=f"{level}. {name}", font=("Arial", 12), width=20, command=lambda level=level: self.selectDifficulty(level)).pack(pady=5)
+
+    def selectDifficulty(self, level):
+        self.difficulty = level
+        self.question_number = 0
+        self.score = 0
+        self.attempt = 1
+
+        messagebox.showinfo(
+            "Difficulty selected", f"You chose {DIFFICULTY_LEVELS[level]}."
+        )    
 
 def main():
     root = tk.TK()

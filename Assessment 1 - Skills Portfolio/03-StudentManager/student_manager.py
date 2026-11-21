@@ -172,7 +172,7 @@ class StudentManager:
 
         menu_options = [
             ("1. View all student records", self.viewAll),
-            ("2. View individual student record", self.comingSoon),
+            ("2. View individual student record", self.viewIndividual),
             ("3. Show highest total score", self.comingSoon),
             ("4. Show lowest total score", self.comingSoon),
         ]
@@ -235,11 +235,64 @@ class StudentManager:
         self.summary_label.config(text=summary, fg="black")
 
     def viewAll(self):
-        """Option 1: show every student record with the class summary."""
         if not self.students:
             self.summary_label.config(text="No student records loaded.", fg="red")
             return
-        self.showStudents(self.students)               
+        self.showStudents(self.students)
+        
+    def chooseStudent(self, title, prompt):
+        #Alphabetical order makes a long list easier to scan
+        ordered = sorted(self.students, key=lambda student: student.name.lower())
+        labels = [f"{student.name} ({student.code})" for student in ordered]
+        chosen = None
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.transient(self.root) #Keep it on top of the main window
+        dialog.resizable(False, False)
+
+        def confirm():
+            """OK button: remember the selection and close the pop-up."""
+            nonlocal chosen
+            index = combo.current() #-1 if nothing is selected
+            if index >= 0:
+                chosen = ordered[index]
+            dialog.destroy()
+
+        tk.Label(dialog, text=prompt, font=("Arial", 11)).pack(padx=20, pady=(15, 5))
+
+        #State="readonly" stops the user typing something that isn't in the list
+        combo = ttk.Combobox(dialog, values=labels, state="readonly", width=35)
+        combo.pack(padx=20, pady=5)
+        combo.current(0) #Preselect the first student
+
+        button_frame = tk.Frame(dialog)
+        button_frame.pack(pady=(10, 15))
+        tk.Button(button_frame, text="OK", width=10, command=confirm).pack(side="left", padx=5)
+        tk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(side="left", padx=5)
+
+        dialog.bind("<Return>", lambda event: confirm())
+        dialog.bind("<Escape>", lambda event: dialog.destroy())
+
+        #Modal: block the main window until this pop-up is closed
+        dialog.wait_visibility()
+        dialog.grab_set()
+        self.root.wait_window(dialog)
+
+        return chosen 
+
+    def viewIndividual(self):
+        if not self.students:
+            self.summary_label.config(text="No student records loaded.", fg="red")
+            return
+
+        student = self.chooseStudent(
+            "View individual record", "Select a student:"
+        )
+        if student is None:
+            return #The user cancelled, so leave the display unchanged
+
+        self.showStudents([student], summary=f"Showing the record for {student.name}.")                     
 
 def main():
     root = tk.Tk()

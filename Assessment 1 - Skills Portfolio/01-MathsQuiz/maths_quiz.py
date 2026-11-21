@@ -15,6 +15,15 @@ DIFFICULTY_RANGES = {1: (1, 9), 2: (10, 99), 3: (1000,9999)}
 POINTS_PER_ATTEMPT = {1: 10, 2: 5}
 #How long in miliseconds feedback stays on screen before the next question
 FEEDBACK_DELAY_MS = 1200
+#Grade boundaries
+GRADE_BOUNDARIES = [
+    (91, "A+"),
+    (80, "A"),
+    (70, "B"),
+    (60, "C"),
+    (50, "D"),
+    (0, "F"),
+]
 
 class MathsQuiz:
 
@@ -124,19 +133,13 @@ class MathsQuiz:
     def isCorrect(self, user_answer, correct_answer, attempt):     
         if user_answer == correct_answer:
             points = POINTS_PER_ATTEMPT[attempt]
-            self.feedback_label.config(
-                text=f"Correct! +{points} points", fg="green"
-            )
+            self.feedback_label.config(text=f"Correct! +{points} points", fg="green")
             return True
 
         if attempt == 1:
-            self.feedback_label.config(
-                text="Not quite. Try once more!", fg="orange"
-            )
+            self.feedback_label.config(text="Not quite. Try once more!", fg="orange")
         else:
-            self.feedback_label.config(
-                text=f"Wrong. The answer was {correct_answer}.", fg="red"
-            )
+            self.feedback_label.config(text=f"Wrong. The answer was {correct_answer}.", fg="red")
         return False
 
     def finishQuestion(self):
@@ -149,8 +152,23 @@ class MathsQuiz:
             self.generateQuestion()
             self.displayProblem()
         else:
-            messagebox.showinfo("Finished", f"Final score: {self.score}/100")
-            self.displayMenu()       
+            self.displayResults(self.score)       
+
+    def getGrade(self, score):
+        for minimum, grade in GRADE_BOUNDARIES:
+            if score >= minimum:
+                return grade
+
+    def displayResults(self, score):
+        self.clearWindow()
+
+        tk.Label(self.root, text="Quiz Complete!", font=("Arial", 24, "bold")).pack(pady=(40, 10))
+
+        tk.Label(self.root, text=f"Your score: {score} / {TOTAL_QUESTIONS * 10}", font=("Arial", 16),).pack(pady=5)
+
+        tk.Label(self.root, text=f"Grade: {self.getGrade(score)}",font=("Arial", 28, "bold"),).pack(pady=15)
+
+        tk.Button(self.root, text="Back to menu", font=("Arial", 12), width=15, command=self.displayMenu,).pack(pady=10)
 
 def main():
     root = tk.TK()

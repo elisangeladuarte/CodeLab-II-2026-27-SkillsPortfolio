@@ -70,6 +70,9 @@ class JokeAssistant:
         self.setup_label = tk.Label(self.root, text="", font=("Arial", 14), wraplength=WRAP_LENGTH)
         self.setup_label.pack(pady=(25, 10))
 
+        self.punchline_button = tk.Button(self.root, text="Show Punchline", font=("Arial", 12), width=22, state="disabled", command=self.showPunchline,)
+        self.punchline_button.pack(pady=5)
+
         # Punchline label
         self.punchline_label = tk.Label(self.root, text="", font=("Arial", 14, "italic"), fg="blue", wraplength=WRAP_LENGTH,)
         self.punchline_label.pack(pady=10)
@@ -93,6 +96,15 @@ class JokeAssistant:
 
         self.setup_label.config(text=setup, fg="black")
         self.punchline_label.config(text="") #Clear the previous punchline
+        self.punchline_button.config(state="normal")
+
+    def showPunchline(self):
+        if self.current_joke is None:
+            return   #No joke on screen, so nothing to reveal
+
+        _, punchline = self.current_joke   #The setup is already showing
+        self.punchline_label.config(text=punchline)
+        self.punchline_button.config(state="disabled")   #Already revealed    
 
 def main():
     root = tk.Tk()

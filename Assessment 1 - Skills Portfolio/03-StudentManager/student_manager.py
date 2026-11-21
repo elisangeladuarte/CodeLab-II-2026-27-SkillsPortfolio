@@ -135,6 +135,14 @@ def averagePercentage(students):
         return 0.0
     return sum(student.percentage for student in students) / len(students)
 
+def findExtremes(students, highest=True):
+    if not students:
+        return []
+
+    pick = max if highest else min
+    target = pick(student.total for student in students)
+    return [student for student in students if student.total == target]
+
 class StudentManager:
 
     def __init__(self, root):
@@ -160,7 +168,7 @@ class StudentManager:
         messagebox.showwarning("Problems with the data file", message)   
 
     def createWidgets(self):
-        # Left column holds the menu, right column holds the results
+        #Left column holds the menu, right column holds the results
         self.root.columnconfigure(1, weight=1)
         self.root.rowconfigure(0, weight=1)
 
@@ -173,8 +181,8 @@ class StudentManager:
         menu_options = [
             ("1. View all student records", self.viewAll),
             ("2. View individual student record", self.viewIndividual),
-            ("3. Show highest total score", self.comingSoon),
-            ("4. Show lowest total score", self.comingSoon),
+            ("3. Show highest total score", self.showHighest),
+            ("4. Show lowest total score", self.showLowest),
         ]
         for text, handler in menu_options:
             tk.Button(menu_frame, text=text, font=("Arial", 10), width=32, anchor="w", command=handler,).pack(pady=3)
@@ -292,7 +300,36 @@ class StudentManager:
         if student is None:
             return #The user cancelled, so leave the display unchanged
 
-        self.showStudents([student], summary=f"Showing the record for {student.name}.")                     
+        self.showStudents([student], summary=f"Showing the record for {student.name}.")          
+        
+    def showExtreme(self, highest):
+        """Show the student(s) with the highest or lowest total mark.
+
+        Args:
+            highest (bool): True for the highest total, False for the lowest.
+        """
+        if not self.students:
+            self.summary_label.config(text="No student records loaded.", fg="red")
+            return
+
+        matches = findExtremes(self.students, highest)
+        word = "highest" if highest else "lowest"
+        total = matches[0].total
+
+        if len(matches) == 1:
+            summary = f"Student with the {word} total: {total}/{MAX_TOTAL} marks."
+        else:
+            summary = (
+                f"{len(matches)} students tied for the {word} total: "
+                f"{total}/{MAX_TOTAL} marks."
+            )
+        self.showStudents(matches, summary=summary)
+
+    def showHighest(self):
+        self.showExtreme(highest=True)
+
+    def showLowest(self):
+        self.showExtreme(highest=False)             
 
 def main():
     root = tk.Tk()

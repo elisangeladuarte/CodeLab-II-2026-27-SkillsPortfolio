@@ -11,6 +11,10 @@ DIFFICULTY_LEVELS = {1: "Easy", 2:"Moderate", 3:"Advanced"}
 #Difficluty level -> minimum, maximum value for each number
 #Easy = 1 digit (1-9), Moderate = 2 digits (10-99), Advanced = 4 digits (1000-9999)
 DIFFICULTY_RANGES = {1: (1, 9), 2: (10, 99), 3: (1000,9999)}
+#Points awarded, keyed by the attempt number, a failed second attempt scores 0
+POINTS_PER_ATTEMPT = {1: 10, 2: 5}
+#How long in miliseconds feedback stays on screen before the next question
+FEEDBACK_DELAY_MS = 1200
 
 class MathsQuiz:
 
@@ -75,7 +79,9 @@ class MathsQuiz:
         self.clearWindow()
 
         tk.Label(self.root, text=f"Question {self.question_number} of {TOTAL_QUESTIONS}", font=("Arial", 12),).pack(pady=20,0))
-        tk.Label(self.root, text=f"Score: {self.score}", font=("Arial", 12)).pack()
+
+        self.score_label = tk.Label(self.root, text=f"Score: {self.score}", font=("Arial", 12))
+        self.score_label.pack()
 
         #The problem itself
         tk.Label(self.root, text=f"{self.num1} {self.operation} {self.num2} =", font=("Arial", 28, "bold"),).pack(pady=20)
@@ -84,10 +90,9 @@ class MathsQuiz:
             self.root, font=("Arial", 18), width=10, justify="center")
         self.asnwer_entry.pack()
         self.answer_entry.focus_set()
-
         self.aswer_entry.bind("<Return", lambda event: self.checkAnswer())
 
-        tk.Button(self.root, text="Submit", font=("Airal", 12), width=12, commanda=self.checkAnswer,).pack(pady=15)
+        self.submit_button = tk.Button(self.root, text="Submit", font=("Airal", 12), width=12, commanda=self.checkAnswer,).pack(pady=15)
 
         #Label used for feedback messages
         self.feedback_label = tk.Label(self.root, text="", font=("Arial", 12))
@@ -103,13 +108,49 @@ class MathsQuiz:
             self.answer_entry.focus_set()
             return
 
-        if self.question_number < TOTAL_QUESTIONS:
-            self.generatequestion()
-            self.displayProblem()
-
+        if self.isCorrect(user_answer, self.correct_answer, self.attempt):
+            self.score += POINTS_PER_ATTEMPT[self.attempt]
+            self.score_label.config(text=f"Score: {self.score}")
+            self.finishQuestion()
+        elif self.attempt == 1:
+            # Wrong the first time: stay on this question for one more go
+            self.attempt = 2
+            self.answer_entry.delete(0, tk.END)
+            self.answer_entry.focus_set()
         else:
-            messagebox.showinfo("Finished", "That was question 10.")
-            self.displayMenu()
+            # Wrong twice: no points, move on
+            self.finishQuestion() 
+
+    def isCorrect(self, user_answer, correct_answer, attempt):     
+        if user_answer == correct_answer:
+            points = POINTS_PER_ATTEMPT[attempt]
+            self.feedback_label.config(
+                text=f"Correct! +{points} points", fg="green"
+            )
+            return True
+
+        if attempt == 1:
+            self.feedback_label.config(
+                text="Not quite. Try once more!", fg="orange"
+            )
+        else:
+            self.feedback_label.config(
+                text=f"Wrong. The answer was {correct_answer}.", fg="red"
+            )
+        return False
+
+    def finishQuestion(self):
+        self.answer_entry.config(state="disabled")
+        self.submit_button.config(state="disabled")
+        self.root.after(FEEDBACK_DELAY_MS, self.nextQuestion)
+
+    def nextQuestion(self):
+        if self.question_number < TOTAL_QUESTIONS:
+            self.generateQuestion()
+            self.displayProblem()
+        else:
+            messagebox.showinfo("Finished", f"Final score: {self.score}/100")
+            self.displayMenu()       
 
 def main():
     root = tk.TK()

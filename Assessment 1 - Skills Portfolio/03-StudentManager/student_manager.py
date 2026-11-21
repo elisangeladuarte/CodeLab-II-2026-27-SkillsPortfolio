@@ -4,7 +4,7 @@ from tkinter import messagebox, ttk
 
 #Constants
 WINDOW_TITLE = "Student Manager"
-WINDOW_SIZE = "900x600"
+WINDOW_SIZE = "950x6520"
 #Build the path from this script's location so it works from any folder
 DATA_FILE = Path(__file__).parent / "studentMarks.txt"
 #Maximum marks available (3 coursework marks of 20, plus an exam out of 100)
@@ -211,7 +211,7 @@ class StudentManager:
         self.createWidgets()
     
         self.placeholder = tk.Label(self.root, text="Student Manager", font=("Arial", 24, "bold"))
-        self.placeholder.pack(pady=200)
+        self.placeholder.grid(row=0, column=0, pady=200)
 
     def reportProblems(self, problems):
         shown = problems[:MAX_PROBLEMS_SHOWN]
@@ -271,9 +271,6 @@ class StudentManager:
 
     def clearTable(self):
         self.table.delete(*self.table.get_children())
-
-    def comingSoon(self):
-        self.summary_label.config(text="That option isn't built yet.", fg="black")  
         
     def showStudents(self, students, summary=None):
         self.clearTable()

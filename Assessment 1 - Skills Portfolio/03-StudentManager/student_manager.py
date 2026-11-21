@@ -29,6 +29,14 @@ TABLE_COLUMNS = [
     ("Percentage", 100, "center"),
     ("Grade", 70, "center"),
 ]
+#Sort choices: label shown to the user -> function that gives the sort key
+SORT_KEYS = {
+    "Name": lambda student: student.name.lower(),
+    "Student number": lambda student: student.code,
+    "Coursework total": lambda student: student.coursework_total,
+    "Exam mark": lambda student: student.exam,
+    "Overall percentage": lambda student: student.percentage,
+}
 
 class Student:
 
@@ -142,6 +150,9 @@ def findExtremes(students, highest=True):
     pick = max if highest else min
     target = pick(student.total for student in students)
     return [student for student in students if student.total == target]
+
+def sortStudents(students, key_name, descending=False):
+    return sorted(students, key=SORT_KEYS[key_name], reverse=descending)
 
 class StudentManager:
 
@@ -329,7 +340,62 @@ class StudentManager:
         self.showExtreme(highest=True)
 
     def showLowest(self):
-        self.showExtreme(highest=False)             
+        self.showExtreme(highest=False)    
+
+    def chooseSortOrder(self):
+        result = None
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Sort student records")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+
+        def confirm():
+            """OK button: remember the choices and close the pop-up."""
+            nonlocal result
+            result = (key_combo.get(), direction.get() == "descending")
+            dialog.destroy()
+
+        tk.Label(dialog, text="Sort by:", font=("Arial", 11)).pack(padx=20, pady=(15, 5))
+        key_combo = ttk.Combobox(dialog, values=list(SORT_KEYS), state="readonly", width=25)
+        key_combo.pack(padx=20, pady=5)
+        key_combo.current(0)
+
+        #Radio buttons share one variable, so only one can be selected
+        direction = tk.StringVar(value="ascending")
+        tk.Radiobutton(dialog, text="Ascending (low to high, A-Z)", variable=direction, value="ascending",).pack(anchor="w", padx=30)
+        tk.Radiobutton(dialog, text="Descending (high to low, Z-A)", variable=direction, value="descending",).pack(anchor="w", padx=30)
+
+        button_frame = tk.Frame(dialog)
+        button_frame.pack(pady=(10, 15))
+        tk.Button(button_frame, text="OK", width=10, command=confirm).pack(side="left", padx=5)
+        tk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(side="left", padx=5)
+
+        dialog.bind("<Return>", lambda event: confirm())
+        dialog.bind("<Escape>", lambda event: dialog.destroy())
+
+        dialog.wait_visibility()
+        dialog.grab_set()
+        self.root.wait_window(dialog)
+
+        return result
+
+    def showSorted(self):
+        if not self.students:
+            self.summary_label.config(text="No student records loaded.", fg="red")
+            return
+
+        choice = self.chooseSortOrder()
+        if choice is None:
+            return #Cancelled, so leave the display unchanged
+
+        key_name, descending = choice
+        ordered = sortStudents(self.students, key_name, descending)
+        direction = "descending" if descending else "ascending"
+        self.showStudents(
+            ordered,
+            summary=f"All {len(ordered)} students sorted by {key_name.lower()} ({direction}).",
+        )         
 
 def main():
     root = tk.Tk()

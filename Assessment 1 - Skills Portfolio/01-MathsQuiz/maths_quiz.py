@@ -43,6 +43,7 @@ class MathsQuiz:
         self.operation = "+"
         self.correct_answer = 0
 
+        self.resetQuiz()
         self.displayMenu()
 
     def clearWindow(self):
@@ -168,7 +169,31 @@ class MathsQuiz:
 
         tk.Label(self.root, text=f"Grade: {self.getGrade(score)}",font=("Arial", 28, "bold"),).pack(pady=15)
 
-        tk.Button(self.root, text="Back to menu", font=("Arial", 12), width=15, command=self.displayMenu,).pack(pady=10)
+        tk.Label(self.root, text="Would you like to play gain?", font=("Arial", 12),).pack(pady=(10, 5))
+
+        button_frame = tk.Frame(self.root)
+        button_frame.pack(pady=10)
+
+        tk.Button(button_frame, text="Play again", font=("Arial", 12), width=12, commad=self.playAgain,).pack(side="left", padx=10)
+
+        tk.Button(button_frame, text="Quit", font=("Arial", 12), width=12, command=self.quitQuiz,).pack(side="left", padx=10)
+
+    def resetQuiz(self):
+        self.difficulty = None
+        self.question_number = 0
+        self.score = 0
+        self.attempt = 1
+        self.num1 = 0
+        self.num2 = 0
+        self.operation = "+"
+        self.correct_answer = 0
+
+    def playAgain(self):
+        self.resetQuiz()
+        self.displayMenu()
+
+    def quitQuiz(self):
+        self.root.destroy()
 
 def main():
     root = tk.TK()

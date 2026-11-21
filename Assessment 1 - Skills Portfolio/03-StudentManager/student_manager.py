@@ -138,6 +138,48 @@ def loadStudents(path):
 
     return students, problems
 
+def saveStudents(path, students):
+    lines = [str(len(students))]
+    for student in students:
+        marks = ",".join(str(mark) for mark in student.coursework)
+        lines.append(f"{student.code},{student.name},{marks},{student.exam}")
+
+    try:
+        with open(path, "w", encoding="utf-8") as file:
+            file.write("\n".join(lines) + "\n")
+    except OSError as error:
+        messagebox.showerror("Save failed", f"The file could not be saved:\n{error}")
+        return False
+    return True
+
+def buildStudent(code_text, name, mark_texts, exam_text, existing_codes):
+    name = name.strip()
+    if not name:
+        raise ValueError("The name can't be empty.")
+    if "," in name:
+        raise ValueError("The name can't contain a comma (the file uses commas).")
+
+    try:
+        code = int(code_text)
+    except ValueError:
+        raise ValueError("The student code must be a whole number.") from None
+    if not MIN_CODE <= code <= MAX_CODE:
+        raise ValueError(f"The student code must be {MIN_CODE}-{MAX_CODE}.")
+    if code in existing_codes:
+        raise ValueError(f"The code {code} is already in use.")
+
+    try:
+        coursework = [int(text) for text in mark_texts]
+        exam = int(exam_text)
+    except ValueError:
+        raise ValueError("All marks must be whole numbers.") from None
+    if any(not 0 <= mark <= MAX_COURSEWORK_MARK for mark in coursework):
+        raise ValueError(f"Coursework marks must be 0-{MAX_COURSEWORK_MARK}.")
+    if not 0 <= exam <= MAX_EXAM_MARK:
+        raise ValueError(f"The exam mark must be 0-{MAX_EXAM_MARK}.")
+
+    return Student(code, name, coursework, exam)
+
 def averagePercentage(students):
     if not students:
         return 0.0
@@ -194,6 +236,8 @@ class StudentManager:
             ("2. View individual student record", self.viewIndividual),
             ("3. Show highest total score", self.showHighest),
             ("4. Show lowest total score", self.showLowest),
+            ("5. Sort student records", self.showSorted),
+            ("6. Add a student record", self.addStudent),
         ]
         for text, handler in menu_options:
             tk.Button(menu_frame, text=text, font=("Arial", 10), width=32, anchor="w", command=handler,).pack(pady=3)
@@ -392,9 +436,86 @@ class StudentManager:
         key_name, descending = choice
         ordered = sortStudents(self.students, key_name, descending)
         direction = "descending" if descending else "ascending"
+        self.showStudents(ordered, summary=f"All {len(ordered)} students sorted by {key_name.lower()} ({direction}).",)    
+
+    def askStudentDetails(self, title, student=None):
+        result = None
+        #A student keeping their own code must not clash with themselves
+        existing_codes = {s.code for s in self.students if s is not student}
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+
+        labels = [
+            "Student name", "Student code (1000-9999)",
+            "Coursework mark 1 (/20)", "Coursework mark 2 (/20)",
+            "Coursework mark 3 (/20)", "Exam mark (/100)",
+        ]
+        initial = [""] * len(labels)
+        if student is not None:
+            initial = [
+                student.name, student.code, *student.coursework, student.exam,
+            ]
+
+        entries = []
+        for row, (label, value) in enumerate(zip(labels, initial)):
+            tk.Label(dialog, text=label, anchor="w").grid(
+                row=row, column=0, sticky="w", padx=(20, 10), pady=4
+            )
+            entry = tk.Entry(dialog, width=25)
+            entry.insert(0, str(value))
+            entry.grid(row=row, column=1, padx=(0, 20), pady=4)
+            entries.append(entry)
+
+        error_label = tk.Label(dialog, text="", fg="red", wraplength=300)
+        error_label.grid(row=len(labels), column=0, columnspan=2, pady=(5, 0))
+
+        def confirm():
+            """Save button: validate the form and close it if everything is valid."""
+            nonlocal result
+            name, code, m1, m2, m3, exam = (entry.get().strip() for entry in entries)
+            try:
+                result = buildStudent(code, name, [m1, m2, m3], exam, existing_codes)
+            except ValueError as error:
+                error_label.config(text=str(error)) #Stay open so they can fix it
+                return
+            dialog.destroy()
+
+        button_frame = tk.Frame(dialog)
+        button_frame.grid(row=len(labels) + 1, column=0, columnspan=2, pady=15)
+        tk.Button(button_frame, text="Save", width=10, command=confirm).pack(
+            side="left", padx=5
+        )
+        tk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(
+            side="left", padx=5
+        )
+
+        dialog.bind("<Return>", lambda event: confirm())
+        dialog.bind("<Escape>", lambda event: dialog.destroy())
+        entries[0].focus_set()
+
+        dialog.wait_visibility()
+        dialog.grab_set()
+        self.root.wait_window(dialog)
+
+        return result
+
+    def addStudent(self):
+        """Option 6: add a new student and save the file."""
+        student = self.askStudentDetails("Add a student record")
+        if student is None:
+            return #Cancelled
+
+        self.students.append(student)
+        if not saveStudents(DATA_FILE, self.students):
+            self.students.remove(student) #Keep memory and file in step
+            return
+
         self.showStudents(
-            ordered,
-            summary=f"All {len(ordered)} students sorted by {key_name.lower()} ({direction}).",
+            [student],
+            summary=f"Added {student.name}. The class now has {len(self.students)} students.",
         )         
 
 def main():

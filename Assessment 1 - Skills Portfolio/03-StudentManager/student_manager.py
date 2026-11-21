@@ -20,6 +20,15 @@ FIELDS_PER_LINE = COURSEWORK_COUNT + 3
 MAX_PROBLEMS_SHOWN = 5
 #Grade boundaries: minimum percentage, grade, checked from highest to lowest
 GRADE_BOUNDARIES = [(70, "A"), (60, "B"), (50, "C"), (40, "D"), (0, "F")]
+#Table columns: (heading, width in pixels, text alignment)
+TABLE_COLUMNS = [
+    ("Name", 200, "w"),
+    ("Number", 80, "center"),
+    ("Coursework (/60)", 120, "center"),
+    ("Exam (/100)", 100, "center"),
+    ("Percentage", 100, "center"),
+    ("Grade", 70, "center"),
+]
 
 class Student:
 
@@ -133,6 +142,8 @@ class StudentManager:
         if problems:
             self.reportProblems(problems)
 
+        self.createWidgets()
+    
         self.placeholder = tk.Label(self.root, text="Student Manager", font=("Arial", 24, "bold"))
         self.placeholder.pack(pady=200)
 
@@ -141,7 +152,58 @@ class StudentManager:
         message = "\n".join(shown)
         if len(problems) > MAX_PROBLEMS_SHOWN:
             message += f"\n...and {len(problems) - MAX_PROBLEMS_SHOWN} more."
-        messagebox.showwarning("Problems with the data file", message)    
+        messagebox.showwarning("Problems with the data file", message)   
+
+    def createWidgets(self):
+        # Left column holds the menu, right column holds the results
+        self.root.columnconfigure(1, weight=1)
+        self.root.rowconfigure(0, weight=1)
+
+        #Menu
+        menu_frame = tk.Frame(self.root, padx=15, pady=15)
+        menu_frame.grid(row=0, column=0, sticky="ns")
+
+        tk.Label(menu_frame, text="MENU", font=("Arial", 14, "bold")).pack(pady=(0, 10))
+
+        menu_options = [
+            ("1. View all student records", self.comingSoon),
+            ("2. View individual student record", self.comingSoon),
+            ("3. Show highest total score", self.comingSoon),
+            ("4. Show lowest total score", self.comingSoon),
+        ]
+        for text, handler in menu_options:
+            tk.Button(menu_frame, text=text, font=("Arial", 10), width=32, anchor="w", command=handler,).pack(pady=3)
+
+        #Results area
+        display_frame = tk.Frame(self.root, padx=10, pady=15)
+        display_frame.grid(row=0, column=1, sticky="nsew")
+        display_frame.columnconfigure(0, weight=1)
+        display_frame.rowconfigure(0, weight=1)
+
+        headings = [heading for heading, _, _ in TABLE_COLUMNS]
+        self.table = ttk.Treeview(display_frame, columns=headings, show="headings", selectmode="browse")
+        for heading, width, alignment in TABLE_COLUMNS:
+            self.table.heading(heading, text=heading)
+            self.table.column(heading, width=width, anchor=alignment)
+        self.table.grid(row=0, column=0, sticky="nsew")
+
+        scrollbar = ttk.Scrollbar(display_frame, orient="vertical", command=self.table.yview)
+        self.table.configure(yscrollcommand=scrollbar.set)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        #Summary
+        self.summary_label = tk.Label(display_frame, text="Choose an option from the menu.", font=("Arial", 11), anchor="w",)
+        self.summary_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+
+        #Without any data there is nothing to show
+        if not self.students:
+            self.summary_label.config(text="No student records loaded.", fg="red")
+
+    def clearTable(self):
+        self.table.delete(*self.table.get_children())
+
+    def comingSoon(self):
+        self.summary_label.config(text="That option isn't built yet.", fg="black")         
 
 def main():
     root = tk.Tk()

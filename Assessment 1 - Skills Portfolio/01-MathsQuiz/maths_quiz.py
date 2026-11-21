@@ -53,6 +53,7 @@ class MathsQuiz:
         self.attempt = 1
 
         self.generateQuestion()
+        self.displayProblem()
 
         messagebox.showinfo("Test question", f"Question {self.question_number}: " f"{self.num1} {self.operation} {self.num2} = ?\n" f"(Answer: {self.correct_answer})",)  
 
@@ -68,7 +69,47 @@ class MathsQuiz:
         self.attempt = 1
         self.num1 = self.randomInt(self.difficulty)
         self.num2 = self.randomInt(self.difficulty)
-        self.operation = self.decideOperation()     
+        self.operation = self.decideOperation()
+
+    def displayProblem(self):
+        self.clearWindow()
+
+        tk.Label(self.root, text=f"Question {self.question_number} of {TOTAL_QUESTIONS}", font=("Arial", 12),).pack(pady=20,0))
+        tk.Label(self.root, text=f"Score: {self.score}", font=("Arial", 12)).pack()
+
+        #The problem itself
+        tk.Label(self.root, text=f"{self.num1} {self.operation} {self.num2} =", font=("Arial", 28, "bold"),).pack(pady=20)
+
+        self.answer_entry = tk.Entry(
+            self.root, font=("Arial", 18), width=10, justify="center")
+        self.asnwer_entry.pack()
+        self.answer_entry.focus_set()
+
+        self.aswer_entry.bind("<Return", lambda event: self.checkAnswer())
+
+        tk.Button(self.root, text="Submit", font=("Airal", 12), width=12, commanda=self.checkAnswer,).pack(pady=15)
+
+        #Label used for feedback messages
+        self.feedback_label = tk.Label(self.root, text="", font=("Arial", 12))
+        self.feedback_Label.pack()
+
+    def checkAnswer(self):
+        text = self.answer_entry.get().strip()    
+
+        try:
+            user_answer = int(text)
+        except ValueError:
+            self.feedback_label.config(text="Please enter a whole number.", fg="red")
+            self.answer_entry.focus_set()
+            return
+
+        if self.question_number < TOTAL_QUESTIONS:
+            self.generatequestion()
+            self.displayProblem()
+
+        else:
+            messagebox.showinfo("Finished", "That was question 10.")
+            self.displayMenu()
 
 def main():
     root = tk.TK()

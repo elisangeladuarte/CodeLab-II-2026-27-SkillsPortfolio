@@ -130,6 +130,11 @@ def loadStudents(path):
 
     return students, problems
 
+def averagePercentage(students):
+    if not students:
+        return 0.0
+    return sum(student.percentage for student in students) / len(students)
+
 class StudentManager:
 
     def __init__(self, root):
@@ -166,7 +171,7 @@ class StudentManager:
         tk.Label(menu_frame, text="MENU", font=("Arial", 14, "bold")).pack(pady=(0, 10))
 
         menu_options = [
-            ("1. View all student records", self.comingSoon),
+            ("1. View all student records", self.viewAll),
             ("2. View individual student record", self.comingSoon),
             ("3. Show highest total score", self.comingSoon),
             ("4. Show lowest total score", self.comingSoon),
@@ -203,7 +208,38 @@ class StudentManager:
         self.table.delete(*self.table.get_children())
 
     def comingSoon(self):
-        self.summary_label.config(text="That option isn't built yet.", fg="black")         
+        self.summary_label.config(text="That option isn't built yet.", fg="black")  
+        
+    def showStudents(self, students, summary=None):
+        self.clearTable()
+
+        for student in students:
+            self.table.insert(
+                "",
+                "end",
+                values=(
+                    student.name,
+                    student.code,
+                    student.coursework_total,
+                    student.exam,
+                    f"{student.percentage:.1f}%",
+                    student.grade,
+                ),
+            )
+
+        if summary is None:
+            summary = (
+                f"Students in class: {len(students)}    "
+                f"Average percentage: {averagePercentage(students):.1f}%"
+            )
+        self.summary_label.config(text=summary, fg="black")
+
+    def viewAll(self):
+        """Option 1: show every student record with the class summary."""
+        if not self.students:
+            self.summary_label.config(text="No student records loaded.", fg="red")
+            return
+        self.showStudents(self.students)               
 
 def main():
     root = tk.Tk()

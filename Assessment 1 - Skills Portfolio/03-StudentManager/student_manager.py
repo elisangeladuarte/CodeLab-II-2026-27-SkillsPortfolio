@@ -238,6 +238,7 @@ class StudentManager:
             ("4. Show lowest total score", self.showLowest),
             ("5. Sort student records", self.showSorted),
             ("6. Add a student record", self.addStudent),
+            ("7. Delete a student record", self.deleteStudent),
         ]
         for text, handler in menu_options:
             tk.Button(menu_frame, text=text, font=("Arial", 10), width=32, anchor="w", command=handler,).pack(pady=3)
@@ -305,6 +306,9 @@ class StudentManager:
         
     def chooseStudent(self, title, prompt):
         #Alphabetical order makes a long list easier to scan
+        if not self.students:
+            return None
+        
         ordered = sorted(self.students, key=lambda student: student.name.lower())
         labels = [f"{student.name} ({student.code})" for student in ordered]
         chosen = None
@@ -315,7 +319,6 @@ class StudentManager:
         dialog.resizable(False, False)
 
         def confirm():
-            """OK button: remember the selection and close the pop-up."""
             nonlocal chosen
             index = combo.current() #-1 if nothing is selected
             if index >= 0:
@@ -342,7 +345,7 @@ class StudentManager:
         dialog.grab_set()
         self.root.wait_window(dialog)
 
-        return chosen 
+        return chosen
 
     def viewIndividual(self):
         if not self.students:
@@ -516,7 +519,39 @@ class StudentManager:
         self.showStudents(
             [student],
             summary=f"Added {student.name}. The class now has {len(self.students)} students.",
-        )         
+        )  
+
+    def deleteStudent(self):
+        if not self.students:
+            self.summary_label.config(text="No student records to delete.", fg="red")
+            return
+
+        student = self.chooseStudent(
+            "Delete a student record", "Select the student to delete:"
+        )
+        if student is None:
+            return   #Cancelled
+
+        confirmed = messagebox.askyesno(
+            "Confirm delete",
+            f"Delete the record for {student.name} ({student.code})?\n"
+            "This cannot be undone.",
+            icon="warning",
+        )
+        if not confirmed:
+            return
+
+        #Remember the position so the record can be put back if saving fails
+        position = self.students.index(student)
+        self.students.remove(student)
+
+        if not saveStudents(DATA_FILE, self.students):
+            self.students.insert(position, student) #Keep memory and file in step
+            return
+
+        self.clearTable()
+        self.summary_label.config(
+            text=f"Deleted {student.name}. The class now has " f"{len(self.students)} students.", fg="black",)           
 
 def main():
     root = tk.Tk()

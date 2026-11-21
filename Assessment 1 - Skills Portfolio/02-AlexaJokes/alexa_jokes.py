@@ -5,7 +5,7 @@ from tkinter import messagebox
 
 #Constants
 WINDOW_TITLE = "Alexa Tell Me a Joke"
-WINDOW_SIZE = "550x350"
+WINDOW_SIZE = "550x420"
 JOKES_FILE = Path(__file__).parent / "randomJokes.txt"
 #Width in pixels at which long jokes wrap onto a new line
 WRAP_LENGTH = 500
@@ -73,9 +73,18 @@ class JokeAssistant:
         self.punchline_button = tk.Button(self.root, text="Show Punchline", font=("Arial", 12), width=22, state="disabled", command=self.showPunchline,)
         self.punchline_button.pack(pady=5)
 
-        # Punchline label
+        #Punchline label
         self.punchline_label = tk.Label(self.root, text="", font=("Arial", 14, "italic"), fg="blue", wraplength=WRAP_LENGTH,)
         self.punchline_label.pack(pady=10)
+
+        #Next Joke and Quit sit side by side inside a frame
+        button_frame = tk.Frame(self.root)
+        button_frame.pack(pady=(20, 10))
+
+        self.next_button = tk.Button(button_frame, text="Next Joke", font=("Arial", 12), width=12, state="disabled", command=self.tellJoke,)
+        self.next_button.pack(side="left", padx=10)
+
+        tk.Button(button_frame, text="Quit", font=("Arial", 12), width=12, command=self.quitApp,).pack(side="left", padx=10)        
 
         #Without any jokes the button can't do anything, so switch it off
         if not self.jokes:
@@ -97,6 +106,7 @@ class JokeAssistant:
         self.setup_label.config(text=setup, fg="black")
         self.punchline_label.config(text="") #Clear the previous punchline
         self.punchline_button.config(state="normal")
+        self.next_button.config(state="normal")
 
     def showPunchline(self):
         if self.current_joke is None:
@@ -104,7 +114,10 @@ class JokeAssistant:
 
         _, punchline = self.current_joke   #The setup is already showing
         self.punchline_label.config(text=punchline)
-        self.punchline_button.config(state="disabled")   #Already revealed    
+        self.punchline_button.config(state="disabled")   #Already revealed   
+
+    def quitApp(self):
+        self.root.destroy() 
 
 def main():
     root = tk.Tk()

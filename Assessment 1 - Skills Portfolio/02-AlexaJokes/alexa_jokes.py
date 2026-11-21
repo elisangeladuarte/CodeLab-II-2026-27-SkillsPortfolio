@@ -5,10 +5,10 @@ from tkinter import messagebox
 
 #Constants
 WINDOW_TITLE = "Alexa Tell Me a Joke"
-WINDOW_SIZE = "550x420"
-JOKES_FILE = Path(__file__).parent / "randomJokes.txt"
+WINDOW_SIZE = "550x450"
 #Width in pixels at which long jokes wrap onto a new line
 WRAP_LENGTH = 500
+JOKES_FILE = Path(__file__).parent / "randomJokes.txt"
 
 class JokeAssistant:
 
@@ -21,8 +21,14 @@ class JokeAssistant:
         #Joke state
         self.jokes = self.loadJokes() #List of (setup, punchline) tuples
         self.current_joke = None #The (setup, punchline) tuple on screen
+        self.joke_queue = [] #Shuffled jokes still to be told
+        self.jokes_told = 0 #Counter shown to the user
 
         self.createWidgets()
+
+        #Keyboard shortcuts
+        self.root.bind("<Return>", lambda event: self.tellJoke())
+        self.root.bind("<Escape>", lambda event: self.quitApp())
 
     def parseJoke(self, line):
         line = line.strip()
@@ -84,7 +90,12 @@ class JokeAssistant:
         self.next_button = tk.Button(button_frame, text="Next Joke", font=("Arial", 12), width=12, state="disabled", command=self.tellJoke,)
         self.next_button.pack(side="left", padx=10)
 
-        tk.Button(button_frame, text="Quit", font=("Arial", 12), width=12, command=self.quitApp,).pack(side="left", padx=10)        
+        tk.Button(button_frame, text="Quit", font=("Arial", 12), width=12, command=self.quitApp,).pack(side="left", padx=10)    
+
+        self.counter_label = tk.Label(
+            self.root, text="Jokes told: 0", font=("Arial", 10), fg="gray"
+        )
+        self.counter_label.pack(pady=(5, 0))            
 
         #Without any jokes the button can't do anything, so switch it off
         if not self.jokes:
@@ -92,14 +103,22 @@ class JokeAssistant:
             self.setup_label.config(text="No jokes available.", fg="red")
 
     def pickJoke(self, previous_joke):
-        joke = random.choice(self.jokes)
+        if not self.joke_queue:
+            self.joke_queue = self.jokes.copy()
+            random.shuffle(self.joke_queue)
 
-        #Re-pick if we got the same joke again (only possible with 2+ jokes)
-        while len(self.jokes) > 1 and joke == previous_joke:
-            joke = random.choice(self.jokes)
-        return joke
+            #Avoid telling the same joke twice in a row across two rounds
+            if len(self.joke_queue) > 1 and self.joke_queue[-1] == self.current_joke:
+                self.joke_queue[0], self.joke_queue[-1] = (
+                    self.joke_queue[-1], self.joke_queue[0],
+                )
+
+        return self.joke_queue.pop()
 
     def tellJoke(self):
+        if not self.jokes:
+            return 
+
         self.current_joke = self.pickJoke(self.current_joke)
         setup, _ = self.current_joke #The punchline stays hidden for now
 
@@ -110,11 +129,11 @@ class JokeAssistant:
 
     def showPunchline(self):
         if self.current_joke is None:
-            return   #No joke on screen, so nothing to reveal
+            return #No joke on screen, so nothing to reveal
 
-        _, punchline = self.current_joke   #The setup is already showing
+        _, punchline = self.current_joke #The setup is already showing
         self.punchline_label.config(text=punchline)
-        self.punchline_button.config(state="disabled")   #Already revealed   
+        self.punchline_button.config(state="disabled") #Already revealed   
 
     def quitApp(self):
         self.root.destroy() 

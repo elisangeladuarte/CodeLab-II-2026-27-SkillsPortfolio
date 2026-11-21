@@ -239,6 +239,7 @@ class StudentManager:
             ("5. Sort student records", self.showSorted),
             ("6. Add a student record", self.addStudent),
             ("7. Delete a student record", self.deleteStudent),
+            ("8. Update a student record", self.updateStudent),
         ]
         for text, handler in menu_options:
             tk.Button(menu_frame, text=text, font=("Arial", 10), width=32, anchor="w", command=handler,).pack(pady=3)
@@ -552,6 +553,37 @@ class StudentManager:
         self.clearTable()
         self.summary_label.config(
             text=f"Deleted {student.name}. The class now has " f"{len(self.students)} students.", fg="black",)           
+
+    def updateStudent(self):
+        if not self.students:
+            self.summary_label.config(text="No student records to update.", fg="red")
+            return
+
+        student = self.chooseStudent(
+            "Update a student record", "Select the student to update:"
+        )
+        if student is None:
+            return #Cancelled
+
+        #The form is pre-filled, so the user only changes what they need to
+        updated = self.askStudentDetails(
+            f"Update {student.name}", student=student
+        )
+        if updated is None:
+            return #Cancelled
+
+        #Swap the old record for the new one, keeping its position in the list
+        position = self.students.index(student)
+        self.students[position] = updated
+
+        if not saveStudents(DATA_FILE, self.students):
+            self.students[position] = student #Keep memory and file in step
+            return
+
+        self.showStudents(
+            [updated],
+            summary=f"Updated the record for {updated.name}.",
+        )
 
 def main():
     root = tk.Tk()

@@ -1,14 +1,23 @@
 import random
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 
 #Constants
 WINDOW_TITLE = "Alexa Tell Me a Joke"
-WINDOW_SIZE = "550x450"
+WINDOW_SIZE = "700x560"
 #Width in pixels at which long jokes wrap onto a new line
-WRAP_LENGTH = 500
+WRAP_LENGTH = 600
 JOKES_FILE = Path(__file__).parent / "randomJokes.txt"
+
+#Colors 
+BG = "#0B1220" #Window background
+CARD = "#141C2F" #Greyed-out button background
+ACCENT = "#2BB6F6" #Buttons and punchline
+ACCENT_HOVER = "#5CC8F8"
+TEXT = "#E8EEF9"
+MUTED = "#8A96B0"
+ERROR = "#FF6B7A"
 
 class JokeAssistant:
 
@@ -17,6 +26,7 @@ class JokeAssistant:
         self.root.title(WINDOW_TITLE)
         self.root.geometry(WINDOW_SIZE)
         self.root.resizable(False, False)
+        self.setupStyle()
 
         #Joke state
         self.jokes = self.loadJokes() #List of (setup, punchline) tuples
@@ -29,6 +39,31 @@ class JokeAssistant:
         #Keyboard shortcuts
         self.root.bind("<Return>", lambda event: self.tellJoke())
         self.root.bind("<Escape>", lambda event: self.quitApp())
+
+    def setupStyle(self):
+        self.root.configure(bg=BG)
+
+        #Default colours for every Label and Frame created from now on
+        self.root.option_add("*Label.background", BG)
+        self.root.option_add("*Label.foreground", TEXT)
+        self.root.option_add("*Frame.background", BG)
+
+        #"clam" is a ttk theme that lets us colour buttons on every system
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure(
+            "TButton",
+            background=ACCENT,
+            foreground=BG,
+            font=("Arial", 12),
+            padding=8,
+            borderwidth=0,
+        )
+        style.map(
+            "TButton",
+            background=[("active", ACCENT_HOVER), ("disabled", CARD)],
+            foreground=[("disabled", MUTED)],
+        )    
 
     def parseJoke(self, line):
         line = line.strip()
@@ -69,38 +104,38 @@ class JokeAssistant:
     def createWidgets(self):
         tk.Label(self.root, text="Joke Assistant", font=("Arial", 22, "bold")).pack(pady=(25, 15))
 
-        self.joke_button = tk.Button(self.root, text="Alexa tell me a Joke", font=("Arial", 12), width=22, command=self.tellJoke,)
+        self.joke_button = ttk.Button(self.root, text="Alexa tell me a Joke", width=22, command=self.tellJoke,)
         self.joke_button.pack(pady=5)
 
         #Setup label: wraplength makes long jokes wrap instead of running off screen
         self.setup_label = tk.Label(self.root, text="", font=("Arial", 14), wraplength=WRAP_LENGTH)
         self.setup_label.pack(pady=(25, 10))
 
-        self.punchline_button = tk.Button(self.root, text="Show Punchline", font=("Arial", 12), width=22, state="disabled", command=self.showPunchline,)
+        self.punchline_button = ttk.Button(self.root, text="Show Punchline", width=22, state="disabled", command=self.showPunchline,)
         self.punchline_button.pack(pady=5)
 
         #Punchline label
-        self.punchline_label = tk.Label(self.root, text="", font=("Arial", 14, "italic"), fg="blue", wraplength=WRAP_LENGTH,)
+        self.punchline_label = tk.Label(self.root, text="", font=("Arial", 14, "italic"), fg=ACCENT, wraplength=WRAP_LENGTH,)
         self.punchline_label.pack(pady=10)
 
         #Next Joke and Quit sit side by side inside a frame
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=(20, 10))
 
-        self.next_button = tk.Button(button_frame, text="Next Joke", font=("Arial", 12), width=12, state="disabled", command=self.tellJoke,)
+        self.next_button = ttk.Button(button_frame, text="Next Joke", width=12, state="disabled", command=self.tellJoke,)
         self.next_button.pack(side="left", padx=10)
 
-        tk.Button(button_frame, text="Quit", font=("Arial", 12), width=12, command=self.quitApp,).pack(side="left", padx=10)    
+        ttk.Button(button_frame, text="Quit", width=12, command=self.quitApp,).pack(side="left", padx=10)    
 
         self.counter_label = tk.Label(
-            self.root, text="Jokes told: 0", font=("Arial", 10), fg="gray"
+            self.root, text="Jokes told: 0", font=("Arial", 10), fg=MUTED
         )
         self.counter_label.pack(pady=(5, 0))            
 
         #Without any jokes the button can't do anything, so switch it off
         if not self.jokes:
             self.joke_button.config(state="disabled")
-            self.setup_label.config(text="No jokes available.", fg="red")
+            self.setup_label.config(text="No jokes available.", fg=ERROR)
 
     def pickJoke(self, previous_joke):
         if not self.joke_queue:
@@ -122,7 +157,7 @@ class JokeAssistant:
         self.current_joke = self.pickJoke(self.current_joke)
         setup, _ = self.current_joke #The punchline stays hidden for now
 
-        self.setup_label.config(text=setup, fg="black")
+        self.setup_label.config(text=setup, fg=TEXT)
         self.punchline_label.config(text="") #Clear the previous punchline
         self.punchline_button.config(state="normal")
         self.next_button.config(state="normal")

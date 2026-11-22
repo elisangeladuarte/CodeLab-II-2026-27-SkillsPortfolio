@@ -1,9 +1,10 @@
 import random
 import tkinter as tk
+from tkinter import ttk
 
 #Constants
 WINDOW_TITLE = "Maths Quiz"
-WINDOW_SIZE = "500x400"
+WINDOW_SIZE = "600x520"
 TOTAL_QUESTIONS = 10
 #Difficulty levels: number -> label shown on the button
 DIFFICULTY_LEVELS = {1: "Easy", 2:"Moderate", 3:"Advanced"}
@@ -24,6 +25,17 @@ GRADE_BOUNDARIES = [
     (0, "F"),
 ]
 
+#Colours
+BG = "#14122B"        
+CARD = "#1E1B3A"     
+ACCENT = "#7C5CFF"   
+ACCENT_HOVER = "#9077FF"
+TEXT = "#F2F0FF"
+MUTED = "#9A96BF"
+SUCCESS = "#3DDC97"
+WARN = "#FFB84D"      
+ERROR = "#FF6B7A"     
+
 class MathsQuiz:
 
     def __init__(self, root):
@@ -32,8 +44,32 @@ class MathsQuiz:
         self.root.geometry(WINDOW_SIZE)
         self.root.resizable(False, False)
 
+        self.setupStyle()
         self.resetQuiz()
         self.displayMenu()
+
+    def setupStyle(self):
+        self.root.configure(bg=BG)
+
+        self.root.option_add("*Label.background", BG)
+        self.root.option_add("*Label.foreground", TEXT)
+        self.root.option_add("*Frame.background", BG)
+
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure(
+            "TButton",
+            background=ACCENT,
+            foreground="white",
+            font=("Arial", 12),
+            padding=8,
+            borderwidth=0,
+        )
+        style.map(
+            "TButton",
+            background=[("active", ACCENT_HOVER), ("disabled", CARD)],
+            foreground=[("disabled", MUTED)],
+        )    
 
     def resetQuiz(self):
         self.difficulty = None #1 = easy, 2 = moderate, 3 = advanced
@@ -57,7 +93,7 @@ class MathsQuiz:
         tk.Label(self.root, text="DIFFICULTY LEVEL", font=("Arial", 14)).pack(pady=(0, 20))
 
         for level, name in DIFFICULTY_LEVELS.items():
-            tk.Button(self.root, text=f"{level}. {name}", font=("Arial", 12), width=20, command=lambda level=level: self.selectDifficulty(level)).pack(pady=5)
+            ttk.Button(self.root, text=f"{level}. {name}", width=20, command=lambda level=level: self.selectDifficulty(level)).pack(pady=5)
 
     def selectDifficulty(self, level):
         self.resetQuiz()
@@ -95,15 +131,15 @@ class MathsQuiz:
 
         tk.Label(self.root, text=f"{self.num1} {self.operation} {self.num2} =", font=("Arial", 28, "bold"),).pack(pady=20)
 
-        self.answer_entry = tk.Entry(self.root, font=("Arial", 18), width=10, justify="center")
+        self.answer_entry = tk.Entry(self.root, font=("Arial", 18), width=10, justify="center", bg=CARD, fg=TEXT, insertbackground=TEXT, relief="flat", disabledbackground=CARD, disabledforeground=MUTED,)
         self.answer_entry.pack()
         self.answer_entry.focus_set()
         self.answer_entry.bind("<Return>", lambda event: self.checkAnswer())
 
-        self.submit_button = tk.Button(self.root, text="Submit", font=("Arial", 12), width=12, command=self.checkAnswer)
+        self.submit_button = ttk.Button(self.root, text="Submit", width=12, command=self.checkAnswer)
         self.submit_button.pack(pady=15)
 
-        self.feedback_label = tk.Label(self.root, text="", font=("Arial", 12))
+        self.feedback_label = tk.Label(self.root, text="")
         self.feedback_label.pack()
 
     def checkAnswer(self):
@@ -116,7 +152,7 @@ class MathsQuiz:
         try:
             user_answer = int(text)
         except ValueError:
-            self.feedback_label.config(text="Please enter a whole number.", fg="red")
+            self.feedback_label.config(text="Please enter a whole number.", fg=ERROR)
             self.answer_entry.focus_set()
             return
 
@@ -134,13 +170,13 @@ class MathsQuiz:
     def isCorrect(self, user_answer, correct_answer, attempt):     
         if user_answer == correct_answer:
             points = POINTS_PER_ATTEMPT[attempt]
-            self.feedback_label.config(text=f"Correct! +{points} points", fg="green")
+            self.feedback_label.config(text=f"Correct! +{points} points", fg=SUCCESS)
             return True
 
         if attempt == 1:
-            self.feedback_label.config(text="Not quite. Try once more!", fg="orange")
+            self.feedback_label.config(text="Not quite. Try once more!", fg=WARN)
         else:
-            self.feedback_label.config(text=f"Wrong. The answer was {correct_answer}.", fg="red")
+            self.feedback_label.config(text=f"Wrong. The answer was {correct_answer}.", fg=ERROR)
         return False
 
     def finishQuestion(self):
@@ -174,9 +210,9 @@ class MathsQuiz:
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=10)
 
-        tk.Button(button_frame, text="Play again", font=("Arial", 12), width=12, commad=self.playAgain,).pack(side="left", padx=10)
+        ttk.Button(button_frame, text="Play again", width=12, commad=self.playAgain,).pack(side="left", padx=10)
 
-        tk.Button(button_frame, text="Quit", font=("Arial", 12), width=12, command=self.quitQuiz,).pack(side="left", padx=10)
+        ttk.Button(button_frame, text="Quit", font=("Arial", 12), width=12, command=self.quitQuiz,).pack(side="left", padx=10)
 
     def resetQuiz(self):
         self.difficulty = None

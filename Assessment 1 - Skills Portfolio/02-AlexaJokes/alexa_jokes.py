@@ -5,7 +5,7 @@ from tkinter import messagebox, ttk
 
 #Constants
 WINDOW_TITLE = "Alexa Tell Me a Joke"
-WINDOW_SIZE = "700x560"
+WINDOW_SIZE = "700x680"
 #Width in pixels at which long jokes wrap onto a new line
 WRAP_LENGTH = 600
 JOKES_FILE = Path(__file__).parent / "randomJokes.txt"
@@ -23,6 +23,19 @@ ERROR = "#FF6B7A"
 TYPE_DELAY_MS = 35 #Pause between typed letters
 DRUM_ROLL_STEPS = 5 #How many times the drum roll dots change
 DRUM_ROLL_DELAY_MS = 300 #Pause between drum roll steps
+PULSE_DELAY_MS = 100 #Pause between steps of the ring pulse
+THINKING_STEPS = 9 #How many pulse steps before the joke appears
+
+#The Echo ring 
+RING_SIZE = 110
+RING_WIDTHS = [4, 6, 8, 10, 8, 6] #Ring thickness at each step of the pulse
+GLOW = "#17405E" #Soft outer circle when the ring is "ready"
+
+#Ring styles: mode -> (ring thickness, ring colour, glow colour)
+RING_STYLES = {
+    "idle": (6, "#24405C", BG), #Dim, glow hidden (same colour as background)
+    "ready": (8, ACCENT_HOVER, GLOW), #Bright and glowing
+}
 
 class JokeAssistant:
 
@@ -113,6 +126,16 @@ class JokeAssistant:
         self.joke_button = ttk.Button(self.root, text="Alexa tell me a Joke", width=22, command=self.tellJoke,)
         self.joke_button.pack(pady=5)
 
+        tk.Label(self.root, text="Joke Assistant", font=("Arial", 22, "bold")).pack(pady=(20, 5))
+
+        # The Echo ring: a glow circle behind a thicker ring, with a small label
+        self.ring_canvas = tk.Canvas(self.root, width=RING_SIZE, height=RING_SIZE, bg=BG, highlightthickness=0,)
+        self.ring_canvas.pack(pady=(0, 10))
+        self.ring_glow = self.ring_canvas.create_oval(5, 5, RING_SIZE - 5, RING_SIZE - 5, outline=BG, width=2)
+        self.ring = self.ring_canvas.create_oval(20, 20, RING_SIZE - 20, RING_SIZE - 20, outline=BG, width=6)
+        self.ring_canvas.create_text(RING_SIZE / 2, RING_SIZE / 2, text="alexa", fill=MUTED, font=("Arial", 11),)
+        self.setRing("idle")
+
         #Setup label: wraplength makes long jokes wrap instead of running off screen
         self.setup_label = tk.Label(self.root, text="", font=("Arial", 14), wraplength=WRAP_LENGTH, height=2,)
         self.setup_label.pack(pady=(25, 10))
@@ -165,14 +188,21 @@ class JokeAssistant:
         self.current_joke = self.pickJoke()
         self.jokes_told += 1
         setup, _ = self.current_joke #The punchline stays hidden for now
-
-        self.setup_label.config(fg=TEXT)
-        self.punchline_label.config(text="") #Clear the previous punchline
-        self.punchline_button.config(state="disabled") #Until the setup is typed
+        
+        self.setup_label.config(text="Thinking...", fg=MUTED)
+        self.punchline_label.config(text="")   # clear the previous punchline
+        self.punchline_button.config(state="disabled")   # until the setup is typed
         self.next_button.config(state="normal")
         self.counter_label.config(text=f"Jokes told: {self.jokes_told}")
 
+        #The ring pulses while Alexa "thinks", then the setup is typed out
+        self.pulseRing(0, self.showSetup)
+
+    def showSetup(self):
+        setup, _ = self.current_joke
+        self.setup_label.config(fg=TEXT)
         self.typeText(self.setup_label, setup, when_done=self.enablePunchline)
+
 
     def enablePunchline(self):
         self.punchline_button.config(state="normal")
@@ -209,6 +239,24 @@ class JokeAssistant:
             _, punchline = self.current_joke
             self.punchline_label.config(fg=ACCENT)
             self.typeText(self.punchline_label, punchline)
+
+    def setRing(self, mode):
+        width, colour, glow = RING_STYLES[mode]
+        self.ring_canvas.itemconfig(self.ring, width=width, outline=colour)
+        self.ring_canvas.itemconfig(self.ring_glow, outline=glow)
+
+    def pulseRing(self, step, when_done):
+        if step < THINKING_STEPS:
+            width = RING_WIDTHS[step % len(RING_WIDTHS)]   # cycles through the list
+            self.ring_canvas.itemconfig(self.ring, width=width, outline=ACCENT)
+            self.ring_canvas.itemconfig(self.ring_glow, outline=BG)
+            self.anim_job = self.root.after(
+                PULSE_DELAY_MS, lambda: self.pulseRing(step + 1, when_done)
+            )
+        else:
+            self.anim_job = None
+            self.setRing("ready")
+            when_done()            
 
     def cancelAnimations(self):
         if self.anim_job is not None:

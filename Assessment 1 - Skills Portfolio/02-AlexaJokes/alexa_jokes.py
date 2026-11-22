@@ -1,3 +1,4 @@
+import json
 import random
 import tkinter as tk
 from pathlib import Path
@@ -9,6 +10,8 @@ WINDOW_SIZE = "700x680"
 #Width in pixels at which long jokes wrap onto a new line
 WRAP_LENGTH = 600
 JOKES_FILE = Path(__file__).parent / "randomJokes.txt"
+# Favourite jokes are saved here so they are still there next time
+FAVOURITES_FILE = Path(__file__).parent / "myFavourites.json"
 
 #Colors 
 BG = "#0B1220" #Window background
@@ -18,6 +21,7 @@ ACCENT_HOVER = "#5CC8F8"
 TEXT = "#E8EEF9"
 MUTED = "#8A96B0"
 ERROR = "#FF6B7A"
+SUCCESS = "#3DDC97"
 
 #Animation timings (in milliseconds)
 TYPE_DELAY_MS = 35 #Pause between typed letters
@@ -37,6 +41,29 @@ RING_STYLES = {
     "ready": (8, ACCENT_HOVER, GLOW), #Bright and glowing
 }
 
+def loadFavourites():
+    try:
+        with open(FAVOURITES_FILE, "r", encoding="utf-8") as file:
+            saved = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+    favourites = []
+    if isinstance(saved, list):
+        for item in saved:
+            #Each joke was saved as [setup, punchline]
+            if isinstance(item, list) and len(item) == 2:
+                favourites.append((str(item[0]), str(item[1])))
+    return favourites
+
+def saveFavourites(favourites):
+    try:
+        with open(FAVOURITES_FILE, "w", encoding="utf-8") as file:
+            json.dump(favourites, file, indent=2) #Tuples are saved as lists
+    except OSError:
+        return False
+    return True
+
 class JokeAssistant:
 
     def __init__(self, root):
@@ -52,6 +79,10 @@ class JokeAssistant:
         self.joke_queue = [] #Shuffled jokes still to be told
         self.jokes_told = 0 #Counter shown to the user
         self.anim_job = None #The pending root.after call, so we cancel it
+        self.favourites = loadFavourites() #Saved (setup, punchline) tuples
+        self.fav_window = None #The favourites window, when it is open
+        self.fav_list = None
+        self.fav_detail = None        
 
         self.createWidgets()
 
@@ -82,7 +113,13 @@ class JokeAssistant:
             "TButton",
             background=[("active", ACCENT_HOVER), ("disabled", CARD)],
             foreground=[("disabled", MUTED)],
-        )    
+        )
+
+        style.configure(
+            "TScrollbar", background=ACCENT, troughcolor=CARD, arrowcolor=BG,
+            bordercolor=CARD, lightcolor=ACCENT, darkcolor=ACCENT,
+        )
+        style.map("TScrollbar", background=[("active", ACCENT_HOVER)])    
 
     def parseJoke(self, line):
         line = line.strip()
@@ -151,15 +188,24 @@ class JokeAssistant:
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=(20, 10))
 
-        self.next_button = ttk.Button(button_frame, text="Next Joke", width=12, state="disabled", command=self.tellJoke,)
-        self.next_button.pack(side="left", padx=10)
+        self.next_button = ttk.Button(button_frame, text="Next Joke", width=12,  state="disabled", command=self.tellJoke,)
+        self.next_button.pack(side="left", padx=8)
 
-        ttk.Button(button_frame, text="Quit", width=12, command=self.quitApp,).pack(side="left", padx=10)    
+        self.save_button = ttk.Button( button_frame, text="Save Joke", width=12, state="disabled", command=self.addFavourite,)
+        self.save_button.pack(side="left", padx=8)
+
+        ttk.Button(button_frame, text="Favourites", width=12, command=self.openFavourites,).pack(side="left", padx=8)
+
+        ttk.Button(button_frame, text="Quit", width=12, command=self.quitApp,).pack(side="left", padx=8)
 
         self.counter_label = tk.Label(
             self.root, text="Jokes told: 0", font=("Arial", 10), fg=MUTED
         )
-        self.counter_label.pack(pady=(5, 0))            
+        self.counter_label.pack(pady=(5, 0))  
+
+        #Short messages such as "Saved to your favourites."
+        self.status_label = tk.Label(self.root, text="", font=("Arial", 10))
+        self.status_label.pack(pady=(2, 0))          
 
         #Without any jokes the button can't do anything, so switch it off
         if not self.jokes:
@@ -190,8 +236,10 @@ class JokeAssistant:
         setup, _ = self.current_joke #The punchline stays hidden for now
         
         self.setup_label.config(text="Thinking...", fg=MUTED)
-        self.punchline_label.config(text="")   # clear the previous punchline
-        self.punchline_button.config(state="disabled")   # until the setup is typed
+        self.punchline_label.config(text="") #Clear the previous punchline
+        self.punchline_button.config(state="disabled") #Until the setup is typed
+        self.save_button.config(state="disabled")
+        self.status_label.config(text="")
         self.next_button.config(state="normal")
         self.counter_label.config(text=f"Jokes told: {self.jokes_told}")
 
@@ -203,9 +251,9 @@ class JokeAssistant:
         self.setup_label.config(fg=TEXT)
         self.typeText(self.setup_label, setup, when_done=self.enablePunchline)
 
-
     def enablePunchline(self):
         self.punchline_button.config(state="normal")
+        self.save_button.config(state="normal")
 
     def showPunchline(self):
         if self.current_joke is None:
@@ -256,7 +304,121 @@ class JokeAssistant:
         else:
             self.anim_job = None
             self.setRing("ready")
-            when_done()            
+            when_done()
+
+    #Favourites
+
+    def addFavourite(self):
+        if self.current_joke is None:
+            return
+
+        if self.current_joke in self.favourites:
+            self.status_label.config(text="Already in your favourites.", fg=MUTED)
+            return
+
+        self.favourites.append(self.current_joke)
+        self.storeFavourites()
+        self.status_label.config(text="Saved to your favourites.", fg=SUCCESS)
+        self.refreshFavourites() #Update the favourites window if it is open
+
+    def storeFavourites(self):
+        if not saveFavourites(self.favourites):
+            messagebox.showerror(
+                "Save failed", "Your favourites could not be saved to the file."
+            )
+
+    def openFavourites(self):
+        if self.fav_window is not None and self.fav_window.winfo_exists():
+            self.fav_window.lift()
+            return
+
+        window = tk.Toplevel(self.root)
+        window.title("Favourite jokes")
+        window.geometry("560x430")
+        window.configure(bg=BG)
+        window.transient(self.root)
+        window.bind("<Escape>", lambda event: window.destroy())
+        self.fav_window = window
+
+        tk.Label(
+            window, text="Your Favourites", font=("Arial", 18, "bold")
+        ).pack(pady=(15, 10))
+
+        #The list of setups, with a scrollbar
+        list_frame = tk.Frame(window)
+        list_frame.pack(fill="both", expand=True, padx=20)
+
+        self.fav_list = tk.Listbox(
+            list_frame, font=("Arial", 12), bg=CARD, fg=TEXT,
+            selectbackground=ACCENT, selectforeground=BG,
+            highlightthickness=0, relief="flat", activestyle="none",
+        )
+        scrollbar = ttk.Scrollbar(list_frame, command=self.fav_list.yview)
+        self.fav_list.config(yscrollcommand=scrollbar.set)
+        self.fav_list.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        self.fav_list.bind("<<ListboxSelect>>", self.showFavouritePunchline)
+
+        #Shows the punchline of the selected joke
+        self.fav_detail = tk.Label(
+            window, text="", font=("Arial", 12, "italic"), fg=ACCENT,
+            wraplength=500, height=2,
+        )
+        self.fav_detail.pack(pady=10)
+
+        buttons = tk.Frame(window)
+        buttons.pack(pady=(0, 15))
+        ttk.Button(
+            buttons, text="Delete selected", width=14, command=self.deleteFavourite
+        ).pack(side="left", padx=6)
+        ttk.Button(
+            buttons, text="Clear all", width=10, command=self.clearFavourites
+        ).pack(side="left", padx=6)
+        ttk.Button(
+            buttons, text="Close", width=10, command=window.destroy
+        ).pack(side="left", padx=6)
+
+        self.refreshFavourites()
+
+    def refreshFavourites(self):
+        if self.fav_window is None or not self.fav_window.winfo_exists():
+            return
+
+        self.fav_list.delete(0, tk.END)
+        for setup, _ in self.favourites:
+            self.fav_list.insert(tk.END, setup)
+
+        if self.favourites:
+            self.fav_detail.config(text="Select a joke to see its punchline.", fg=MUTED)
+        else:
+            self.fav_detail.config(text="No favourites yet.", fg=MUTED)
+
+    def showFavouritePunchline(self, event=None):
+        selection = self.fav_list.curselection() #A tuple of selected positions
+        if selection:
+            _, punchline = self.favourites[selection[0]]
+            self.fav_detail.config(text=punchline, fg=ACCENT)
+
+    def deleteFavourite(self):
+        selection = self.fav_list.curselection()
+        if not selection:
+            self.fav_detail.config(text="Select a joke to delete first.", fg=MUTED)
+            return
+
+        del self.favourites[selection[0]]
+        self.storeFavourites()
+        self.refreshFavourites()
+
+    def clearFavourites(self):
+        if not self.favourites:
+            return
+
+        if messagebox.askyesno(
+            "Clear all", "Delete all of your favourite jokes?", parent=self.fav_window
+        ):
+            self.favourites = []
+            self.storeFavourites()
+            self.refreshFavourites()                        
 
     def cancelAnimations(self):
         if self.anim_job is not None:

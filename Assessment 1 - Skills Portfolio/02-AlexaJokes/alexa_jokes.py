@@ -64,6 +64,13 @@ def saveFavourites(favourites):
         return False
     return True
 
+def findJokes(jokes, word):
+    word = word.lower()
+    return [
+        joke for joke in jokes
+        if word in joke[0].lower() or word in joke[1].lower()
+    ]
+
 class JokeAssistant:
 
     def __init__(self, root):
@@ -163,9 +170,30 @@ class JokeAssistant:
         self.joke_button = ttk.Button(self.root, text="Alexa tell me a Joke", width=22, command=self.tellJoke,)
         self.joke_button.pack(pady=5)
 
+        #Search row: type a word, then press Enter or click Go
+        search_frame = tk.Frame(self.root)
+        search_frame.pack(pady=(10, 0))
+
+        tk.Label(search_frame, text="Joke about:", font=("Arial", 11)).pack(
+            side="left", padx=(0, 8)
+        )
+        self.search_entry = tk.Entry(
+            search_frame, font=("Arial", 12), width=20, bg=CARD, fg=TEXT,
+            insertbackground=TEXT, relief="flat", highlightthickness=1,
+            highlightbackground=CARD, highlightcolor=ACCENT,
+            disabledbackground=CARD,
+        )
+        self.search_entry.pack(side="left", ipady=4)
+        self.search_entry.bind("<Return>", self.onSearchEnter)
+
+        self.search_button = ttk.Button(
+            search_frame, text="Go", width=6, command=self.searchJoke
+        )
+        self.search_button.pack(side="left", padx=(8, 0))
+
         tk.Label(self.root, text="Joke Assistant", font=("Arial", 22, "bold")).pack(pady=(20, 5))
 
-        # The Echo ring: a glow circle behind a thicker ring, with a small label
+        #The Echo ring: a glow circle behind a thicker ring, with a small label
         self.ring_canvas = tk.Canvas(self.root, width=RING_SIZE, height=RING_SIZE, bg=BG, highlightthickness=0,)
         self.ring_canvas.pack(pady=(0, 10))
         self.ring_glow = self.ring_canvas.create_oval(5, 5, RING_SIZE - 5, RING_SIZE - 5, outline=BG, width=2)
@@ -210,6 +238,8 @@ class JokeAssistant:
         #Without any jokes the button can't do anything, so switch it off
         if not self.jokes:
             self.joke_button.config(state="disabled")
+            self.search_entry.config(state="disabled")
+            self.search_button.config(state="disabled")
             self.setup_label.config(text="No jokes available.", fg=ERROR)
 
     def pickJoke(self, previous_joke=None):
@@ -229,12 +259,14 @@ class JokeAssistant:
         if not self.jokes:
             return #Nothing to tell (also protects the Enter shortcut)
 
+        self.startJoke(self.pickJoke())
+
+    def startJoke(self, joke):
         self.cancelAnimations() #Stop any typing or drum roll still running
 
-        self.current_joke = self.pickJoke()
+        self.current_joke = joke
         self.jokes_told += 1
-        setup, _ = self.current_joke #The punchline stays hidden for now
-        
+
         self.setup_label.config(text="Thinking...", fg=MUTED)
         self.punchline_label.config(text="") #Clear the previous punchline
         self.punchline_button.config(state="disabled") #Until the setup is typed
@@ -306,8 +338,33 @@ class JokeAssistant:
             self.setRing("ready")
             when_done()
 
-    #Favourites
+    #Search
+    def onSearchEnter(self, event):
+        self.searchJoke()
+        return "break" #Stops Enter from also telling a random joke
 
+    def searchJoke(self):
+        word = self.search_entry.get().strip()
+        if not word:
+            self.status_label.config(text="Type a word to search for.", fg=MUTED)
+            return
+
+        matches = findJokes(self.jokes, word)
+        if not matches:
+            self.status_label.config(text=f"No jokes about \"{word}\".", fg=ERROR)
+            return
+
+        #Avoid telling the joke that is already on screen, if there is a choice
+        choices = [joke for joke in matches if joke != self.current_joke] or matches
+        self.startJoke(random.choice(choices))
+
+        #startJoke clears the status label, so show the count afterwards
+        noun = "joke" if len(matches) == 1 else "jokes"
+        self.status_label.config(
+            text=f"Found {len(matches)} {noun} about \"{word}\".", fg=MUTED
+        )            
+
+    #Favourites
     def addFavourite(self):
         if self.current_joke is None:
             return

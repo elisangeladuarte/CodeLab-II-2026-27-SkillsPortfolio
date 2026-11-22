@@ -17,6 +17,10 @@ POINTS_PER_ATTEMPT = {1: 10, 2: 5}
 FEEDBACK_DELAY_MS = 1200
 #The streak label turns green once the streak reaches this length
 STREAK_HIGHLIGHT = 3
+#Seconds allowed for each attempt, by difficulty level
+TIME_LIMITS = {1: 15, 2: 25, 3: 45}
+#The timer turns red when this many seconds (or fewer) are left
+WARNING_SECONDS = 5
 #Grade boundaries
 GRADE_BOUNDARIES = [
     (91, "A+"),
@@ -45,6 +49,8 @@ class MathsQuiz:
         self.root.title(WINDOW_TITLE)
         self.root.geometry(WINDOW_SIZE)
         self.root.resizable(False, False)
+
+        self.timer_job = None
 
         self.setupStyle()
         self.resetQuiz()
@@ -84,8 +90,11 @@ class MathsQuiz:
         self.num2 = 0
         self.operation = "+"
         self.correct_answer = 0
+        self.time_left = 0 #Seconds left for the current attempt
+        self.timer_job = None #The pending root.after call, so we can cancel it
 
     def clearWindow(self):
+        self.cancelTimer()
         for widget in self.root.winfo_children():
             widget.destroy()
 
@@ -139,6 +148,9 @@ class MathsQuiz:
         self.streak_label = tk.Label(stats_frame, text=f"Streak: {self.streak}", font=("Arial", 12), fg=MUTED,)
         self.streak_label.pack(side="left", padx=10)
 
+        self.timer_label = tk.Label(self.root, text="", font=("Arial, 12"))
+        self.timer_label.pack(pady=(5, 0))
+
         tk.Label(self.root, text=f"{self.num1} {self.operation} {self.num2} =", font=("Arial", 28, "bold"),).pack(pady=20)
 
         self.answer_entry = tk.Entry(self.root, font=("Arial", 18), width=10, justify="center", bg=CARD, fg=TEXT, insertbackground=TEXT, relief="flat", disabledbackground=CARD, disabledforeground=MUTED,)
@@ -151,6 +163,8 @@ class MathsQuiz:
 
         self.feedback_label = tk.Label(self.root, text="")
         self.feedback_label.pack()
+
+        self.startTimer()
 
     def checkAnswer(self):
 
@@ -175,14 +189,8 @@ class MathsQuiz:
 
             self.updateStats()
             self.finishQuestion()
-        elif self.attempt == 1:
-            self.streak = 0        
-            self.attempt = 2
-            self.updateStats()
-            self.answer_entry.delete(0, tk.END)
-            self.answer_entry.focus_set()
         else:
-            self.finishQuestion() 
+            self.handleMiss() 
 
     def isCorrect(self, user_answer, correct_answer, attempt):     
         if user_answer == correct_answer:
@@ -202,6 +210,7 @@ class MathsQuiz:
         self.root.after(FEEDBACK_DELAY_MS, self.nextQuestion)
 
     def nextQuestion(self):
+        self.cancelTimer()
         if self.question_number < TOTAL_QUESTIONS:
             self.generateQuestion()
             self.displayProblem()
@@ -250,6 +259,7 @@ class MathsQuiz:
         self.displayMenu()
 
     def quitQuiz(self):
+        self.cancelTimer()
         self.root.destroy()
 
     def confirmExit(self):
@@ -260,7 +270,52 @@ class MathsQuiz:
         self.score_label.config(text=f"Score: {self.score}")
 
         colour = SUCCESS if self.streak >= STREAK_HIGHLIGHT else MUTED
-        self.streak_label.config(text=f"Streak: {self.streak}", fg=colour)        
+        self.streak_label.config(text=f"Streak: {self.streak}", fg=colour)  
+
+    def startTimer(self):
+        self.cancelTimer()
+        self.time_left = TIME_LIMITS[self.difficulty]
+        self.updateTimerLabel()
+        self.timer_job = self.root.after(1000, self.tick)
+
+    def tick(self):
+        self.time_left -= 1
+        self.updateTimerLabel()
+
+        if self.time_left <= 0:
+            self.timeUp()
+        else:
+            self.timer_job = self.root.after(1000, self.tick)
+
+    def cancelTimer(self):
+        if self.timer_job is not None:
+            self.root.after_cancel(self.timer_job)
+            self.timer_job = None
+
+    def updateTimerLabel(self):
+        colour = ERROR if self.time_left <= WARNING_SECONDS else MUTED
+        self.timer_label.config(text=f"Time left: {self.time_left}s", fg=colour)
+
+    def timeUp(self):
+        self.timer_job = None
+
+        if self.attempt == 1:
+            self.feedback_label.config(text="Time's up! Try once more!", fg=WARN)
+        else:
+            self.feedback_label.config(text=f"Time's up! The answer was {self.correct_answer}.", fg=ERROR)
+        self.handleMiss()  
+
+    def handleMiss(self):
+        if self.attempt == 1:
+            #A first-attempt miss ends the streak and gives a second go
+            self.streak = 0
+            self.attempt = 2
+            self.updateStats()
+            self.answer_entry.delete(0, tk.END)
+            self.answer_entry.focus_set()
+            self.startTimer()
+        else:
+            self.finishQuestion()            
 
 def main():
     root = tk.Tk()

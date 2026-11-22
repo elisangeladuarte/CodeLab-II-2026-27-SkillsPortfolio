@@ -19,6 +19,11 @@ TEXT = "#E8EEF9"
 MUTED = "#8A96B0"
 ERROR = "#FF6B7A"
 
+#Animation timings (in milliseconds)
+TYPE_DELAY_MS = 35 #Pause between typed letters
+DRUM_ROLL_STEPS = 5 #How many times the drum roll dots change
+DRUM_ROLL_DELAY_MS = 300 #Pause between drum roll steps
+
 class JokeAssistant:
 
     def __init__(self, root):
@@ -33,6 +38,7 @@ class JokeAssistant:
         self.current_joke = None #The (setup, punchline) tuple on screen
         self.joke_queue = [] #Shuffled jokes still to be told
         self.jokes_told = 0 #Counter shown to the user
+        self.anim_job = None #The pending root.after call, so we cancel it
 
         self.createWidgets()
 
@@ -108,14 +114,14 @@ class JokeAssistant:
         self.joke_button.pack(pady=5)
 
         #Setup label: wraplength makes long jokes wrap instead of running off screen
-        self.setup_label = tk.Label(self.root, text="", font=("Arial", 14), wraplength=WRAP_LENGTH)
+        self.setup_label = tk.Label(self.root, text="", font=("Arial", 14), wraplength=WRAP_LENGTH, height=2,)
         self.setup_label.pack(pady=(25, 10))
 
         self.punchline_button = ttk.Button(self.root, text="Show Punchline", width=22, state="disabled", command=self.showPunchline,)
         self.punchline_button.pack(pady=5)
 
         #Punchline label
-        self.punchline_label = tk.Label(self.root, text="", font=("Arial", 14, "italic"), fg=ACCENT, wraplength=WRAP_LENGTH,)
+        self.punchline_label = tk.Label(self.root, text="", font=("Arial", 14, "italic"), fg=ACCENT, wraplength=WRAP_LENGTH, height=2,)
         self.punchline_label.pack(pady=10)
 
         #Next Joke and Quit sit side by side inside a frame
@@ -137,7 +143,7 @@ class JokeAssistant:
             self.joke_button.config(state="disabled")
             self.setup_label.config(text="No jokes available.", fg=ERROR)
 
-    def pickJoke(self, previous_joke):
+    def pickJoke(self, previous_joke=None):
         if not self.joke_queue:
             self.joke_queue = self.jokes.copy()
             random.shuffle(self.joke_queue)
@@ -152,25 +158,65 @@ class JokeAssistant:
 
     def tellJoke(self):
         if not self.jokes:
-            return 
+            return #Nothing to tell (also protects the Enter shortcut)
 
-        self.current_joke = self.pickJoke(self.current_joke)
+        self.cancelAnimations() #Stop any typing or drum roll still running
+
+        self.current_joke = self.pickJoke()
+        self.jokes_told += 1
         setup, _ = self.current_joke #The punchline stays hidden for now
 
-        self.setup_label.config(text=setup, fg=TEXT)
+        self.setup_label.config(fg=TEXT)
         self.punchline_label.config(text="") #Clear the previous punchline
-        self.punchline_button.config(state="normal")
+        self.punchline_button.config(state="disabled") #Until the setup is typed
         self.next_button.config(state="normal")
+        self.counter_label.config(text=f"Jokes told: {self.jokes_told}")
+
+        self.typeText(self.setup_label, setup, when_done=self.enablePunchline)
+
+    def enablePunchline(self):
+        self.punchline_button.config(state="normal")
 
     def showPunchline(self):
         if self.current_joke is None:
             return #No joke on screen, so nothing to reveal
 
-        _, punchline = self.current_joke #The setup is already showing
-        self.punchline_label.config(text=punchline)
-        self.punchline_button.config(state="disabled") #Already revealed   
+        self.punchline_button.config(state="disabled") #Already revealing
+        self.drumRoll(0) 
+
+    def typeText(self, label, text, index=0, when_done=None):
+        label.config(text=text[:index])
+
+        if index < len(text):
+            #Call this same method again shortly, with one more letter
+            self.anim_job = self.root.after(
+                TYPE_DELAY_MS,
+                lambda: self.typeText(label, text, index + 1, when_done),
+            )
+        else:
+            self.anim_job = None
+            if when_done is not None:
+                when_done()
+
+    def drumRoll(self, step):
+        if step < DRUM_ROLL_STEPS:
+            dots = "." * (step % 3 + 1) #Cycles through 1, 2 and 3 dots
+            self.punchline_label.config(text=f"Drum roll{dots}", fg=MUTED)
+            self.anim_job = self.root.after(
+                DRUM_ROLL_DELAY_MS, lambda: self.drumRoll(step + 1)
+            )
+        else:
+            _, punchline = self.current_joke
+            self.punchline_label.config(fg=ACCENT)
+            self.typeText(self.punchline_label, punchline)
+
+    def cancelAnimations(self):
+        if self.anim_job is not None:
+            self.root.after_cancel(self.anim_job)
+            self.anim_job = None         
 
     def quitApp(self):
+        self.cancelAnimations()
         self.root.destroy() 
 
 def main():

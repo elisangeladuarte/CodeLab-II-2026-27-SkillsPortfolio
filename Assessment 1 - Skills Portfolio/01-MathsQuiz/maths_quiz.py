@@ -15,6 +15,8 @@ DIFFICULTY_RANGES = {1: (1, 9), 2: (10, 99), 3: (1000, 9999)}
 POINTS_PER_ATTEMPT = {1: 10, 2: 5}
 #How long in milliseconds feedback stays on screen before the next question
 FEEDBACK_DELAY_MS = 1200
+#The streak label turns green once the streak reaches this length
+STREAK_HIGHLIGHT = 3
 #Grade boundaries
 GRADE_BOUNDARIES = [
     (91, "A+"),
@@ -75,6 +77,8 @@ class MathsQuiz:
         self.difficulty = None #1 = easy, 2 = moderate, 3 = advanced
         self.question_number = 0 #Which question the user is on (1-10)
         self.score = 0 #Running total out of 100
+        self.streak = 0 #Correct first attempt in a row
+        self.best_streak = 0 #Longest streak this quiz 
         self.attempt = 1 #1 = first attempt, 2 = second attempt
         self.num1 = 0 #Current question values
         self.num2 = 0
@@ -126,8 +130,14 @@ class MathsQuiz:
 
         tk.Label(self.root, text=f"Question {self.question_number} of {TOTAL_QUESTIONS}", font=("Arial", 12)).pack(pady=(20, 0))
 
-        self.score_label = tk.Label(self.root, text=f"Score: {self.score}", font=("Arial", 12))
-        self.score_label.pack()
+        stats_frame = tk.Frame(self.root)
+        stats_frame.pack()
+
+        self.score_label = tk.Label(stats_frame, text=f"Score: {self.score}", font=("Arial", 12))
+        self.score_label.pack(side="left", padx=10)
+
+        self.streak_label = tk.Label(stats_frame, text=f"Streak: {self.streak}", font=("Arial", 12), fg=MUTED,)
+        self.streak_label.pack(side="left", padx=10)
 
         tk.Label(self.root, text=f"{self.num1} {self.operation} {self.num2} =", font=("Arial", 28, "bold"),).pack(pady=20)
 
@@ -158,10 +168,17 @@ class MathsQuiz:
 
         if self.isCorrect(user_answer, self.correct_answer, self.attempt):
             self.score += POINTS_PER_ATTEMPT[self.attempt]
-            self.score_label.config(text=f"Score: {self.score}")
+
+            if self.attempt == 1:
+                self.streak += 1
+                self.best_streak = max(self.best_streak, self.streak)
+
+            self.updateStats()
             self.finishQuestion()
         elif self.attempt == 1:
+            self.streak = 0        
             self.attempt = 2
+            self.updateStats()
             self.answer_entry.delete(0, tk.END)
             self.answer_entry.focus_set()
         else:
@@ -203,6 +220,8 @@ class MathsQuiz:
 
         tk.Label(self.root, text=f"Your score: {score} / {TOTAL_QUESTIONS * 10}", font=("Arial", 16),).pack(pady=5)
 
+        tk.Label(self.root, text=f"Best streak: {self.best_streak}", font=("Arial", 12), fg=MUTED,).pack()
+
         tk.Label(self.root, text=f"Grade: {self.getGrade(score)}",font=("Arial", 28, "bold"),).pack(pady=15)
 
         tk.Label(self.root, text="Would you like to play gain?", font=("Arial", 12),).pack(pady=(10, 5))
@@ -218,6 +237,8 @@ class MathsQuiz:
         self.difficulty = None
         self.question_number = 0
         self.score = 0
+        self.streak = 0
+        self.best_streak = 0
         self.attempt = 1
         self.num1 = 0
         self.num2 = 0
@@ -234,6 +255,12 @@ class MathsQuiz:
     def confirmExit(self):
         if self.question_number == 0 or messagebox.askyesno("Quit", "Leave the quiz? Your progress will be lost."):
             self.root.destroy()
+
+    def updateStats(self):
+        self.score_label.config(text=f"Score: {self.score}")
+
+        colour = SUCCESS if self.streak >= STREAK_HIGHLIGHT else MUTED
+        self.streak_label.config(text=f"Streak: {self.streak}", fg=colour)        
 
 def main():
     root = tk.Tk()

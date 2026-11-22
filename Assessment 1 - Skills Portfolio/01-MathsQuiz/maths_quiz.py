@@ -1,10 +1,12 @@
+import json
 import random
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 
 #Constants
 WINDOW_TITLE = "Maths Quiz"
-WINDOW_SIZE = "600x520"
+WINDOW_SIZE = "700x560"
 TOTAL_QUESTIONS = 10
 #Difficulty levels: number -> label shown on the button
 DIFFICULTY_LEVELS = {1: "Easy", 2:"Moderate", 3:"Advanced"}
@@ -40,7 +42,52 @@ TEXT = "#F2F0FF"
 MUTED = "#9A96BF"
 SUCCESS = "#3DDC97"
 WARN = "#FFB84D"      
-ERROR = "#FF6B7A"     
+ERROR = "#FF6B7A"  
+
+#Leaderboard
+LEADERBOARD_FILE = Path(__file__).parent / "leaderboard.json"
+MAX_SCORES = 5 #How many scores are kept for each difficulty
+MAX_NAME_LENGTH = 12
+DEFAULT_NAME = "Player"
+
+def loadLeaderboard():
+    board = {str(level): [] for level in DIFFICULTY_LEVELS}
+
+    try:
+        with open(LEADERBOARD_FILE, "r", encoding="utf-8") as file:
+            saved = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return board
+
+    if isinstance(saved, dict):
+        for level in board:
+            if level in saved:
+                board[level] = saved[level]
+    return board
+
+
+def saveLeaderboard(board):
+    try:
+        with open(LEADERBOARD_FILE, "w", encoding="utf-8") as file:
+            json.dump(board, file, indent=2)
+    except OSError:
+        return False
+    return True
+
+
+def addScore(board, level, name, score, best_streak):
+    entries = board[str(level)]
+    entry = {"name": name, "score": score, "streak": best_streak}
+    entries.append(entry)
+
+    #Highest score first. The sort is stable, so on a tie the older score stays higher.
+    entries.sort(key=lambda item: item["score"], reverse=True)
+    del entries[MAX_SCORES:] #Drop anything below the top few
+
+    for position, item in enumerate(entries, start=1):
+        if item is entry:
+            return position, entry
+    return None, entry
 
 class MathsQuiz:
 
@@ -53,6 +100,8 @@ class MathsQuiz:
         self.timer_job = None
 
         self.setupStyle()
+        self.name_var = tk.StringVar() #Holds the name box text between screens
+        self.leaderboard = loadLeaderboard()
         self.resetQuiz()
         self.displayMenu()
 
@@ -94,6 +143,10 @@ class MathsQuiz:
         self.timer_job = None #The pending root.after call, so we can cancel it
         self.history = []
         self.current_answers = []
+        self.player_name = DEFAULT_NAME
+        self.rank = None #Leaderboard position of the latest result
+        self.last_entry = None #The latest result, so its row can be highlighted 
+        self.saved_ok = True
 
     def clearWindow(self):
         self.cancelTimer()
@@ -107,10 +160,25 @@ class MathsQuiz:
 
         tk.Label(self.root, text="DIFFICULTY LEVEL", font=("Arial", 14)).pack(pady=(0, 20))
 
+        tk.Label(self.root, text="Your name", font=("Arial", 11), fg=MUTED).pack()
+        tk.Entry(
+            self.root, textvariable=self.name_var, font=("Arial", 14), width=20,
+            justify="center", bg=CARD, fg=TEXT, insertbackground=TEXT,
+            relief="flat",
+        ).pack(pady=(2, 15))
+
         for level, name in DIFFICULTY_LEVELS.items():
             ttk.Button(self.root, text=f"{level}. {name}", width=20, command=lambda level=level: self.selectDifficulty(level)).pack(pady=5)
 
+        ttk.Button(
+            self.root,
+            text="View leaderboard",
+            command=lambda: self.displayLeaderboard(1, self.displayMenu),
+        ).pack(pady=(20, 0))
+
     def selectDifficulty(self, level):
+        name = self.name_var.get().strip()[:MAX_NAME_LENGTH] or DEFAULT_NAME
+
         self.resetQuiz()
         self.difficulty = level
         self.generateQuestion()
@@ -221,7 +289,7 @@ class MathsQuiz:
             self.generateQuestion()
             self.displayProblem()
         else:
-            self.displayResults(self.score)       
+            self.finishQuiz()       
 
     def getGrade(self, score):
         for minimum, grade in GRADE_BOUNDARIES:
@@ -239,12 +307,28 @@ class MathsQuiz:
 
         tk.Label(self.root, text=f"Grade: {self.getGrade(score)}",font=("Arial", 28, "bold"),).pack(pady=15)
 
+        if self.rank == 1:
+            message, colour = "New high score!", WARN
+        elif self.rank is not None:
+            level_name = DIFFICULTY_LEVELS[self.difficulty]
+            message = f"You placed #{self.rank} on the {level_name} leaderboard."
+            colour = TEXT
+        else:
+            message, colour = "Not on the leaderboard this time.", MUTED
+
+        if not self.saved_ok:
+            message += " (The leaderboard file couldn't be saved.)"
+
+        tk.Label(self.root, text=message, font=("Arial", 12), fg=colour).pack(pady=5)
+
         tk.Label(self.root, text="Would you like to play gain?", font=("Arial", 12),).pack(pady=(10, 5))
 
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=10)
 
         ttk.Button(button_frame, text="Review answers", command=self.displayReview).pack(side="left", padx=10)
+
+        ttk.Button(button_frame, text="Leaderboard", command=lambda: self.displayLeaderboard(self.difficulty, lambda: self.displayResults(self.score)),).pack(side="left", padx=10)
 
         ttk.Button(button_frame, text="Play again", width=12, commad=self.playAgain,).pack(side="left", padx=10)
 
@@ -262,6 +346,7 @@ class MathsQuiz:
         self.operation = "+"
         self.correct_answer = 0
         self.history = []
+        self.player_name = ""
 
     def playAgain(self):
         self.resetQuiz()
@@ -378,7 +463,60 @@ class MathsQuiz:
             self.root,
             text="Back to results",
             command=lambda: self.displayResults(self.score),
-        ).pack(pady=15)                            
+        ).pack(pady=15)   
+
+    def finishQuiz(self):
+        self.rank, self.last_entry = addScore(
+            self.leaderboard, self.difficulty, self.player_name,
+            self.score, self.best_streak,
+        )
+        self.saved_ok = saveLeaderboard(self.leaderboard)
+        self.displayResults(self.score)
+
+    def displayLeaderboard(self, level, back):
+        self.clearWindow()
+
+        tk.Label(
+            self.root, text="Leaderboard", font=("Arial", 20, "bold")
+        ).pack(pady=(20, 10))
+
+        #One button per difficulty. The one being shown is greyed out.
+        tabs = tk.Frame(self.root)
+        tabs.pack(pady=(0, 15))
+        for tab_level, name in DIFFICULTY_LEVELS.items():
+            state = "disabled" if tab_level == level else "normal"
+            ttk.Button(
+                tabs, text=name, width=12, state=state,
+                command=lambda tab_level=tab_level: self.displayLeaderboard(
+                    tab_level, back
+                ),
+            ).pack(side="left", padx=4)
+
+        entries = self.leaderboard[str(level)]
+        if not entries:
+            tk.Label(
+                self.root, text="No scores yet. Be the first!", fg=MUTED
+            ).pack(pady=30)
+        else:
+            table = tk.Frame(self.root)
+            table.pack()
+
+            headings = ["#", "Player", "Score", "Best streak"]
+            for column, heading in enumerate(headings):
+                tk.Label(
+                    table, text=heading, font=("Arial", 11, "bold"), fg=MUTED
+                ).grid(row=0, column=column, padx=15, pady=4)
+
+            for row, entry in enumerate(entries, start=1):
+                #Highlight the row that was just added
+                colour = ACCENT_HOVER if entry is self.last_entry else TEXT
+                values = [row, entry["name"], entry["score"], entry["streak"]]
+                for column, value in enumerate(values):
+                    tk.Label(
+                        table, text=value, font=("Arial", 12), fg=colour
+                    ).grid(row=row, column=column, padx=15, pady=2)
+
+        ttk.Button(self.root, text="Back", command=back).pack(pady=20)                                                       
 
 def main():
     root = tk.Tk()

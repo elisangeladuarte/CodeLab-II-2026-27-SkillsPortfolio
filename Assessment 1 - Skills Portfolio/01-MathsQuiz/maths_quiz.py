@@ -92,6 +92,8 @@ class MathsQuiz:
         self.correct_answer = 0
         self.time_left = 0 #Seconds left for the current attempt
         self.timer_job = None #The pending root.after call, so we can cancel it
+        self.history = []
+        self.current_answers = []
 
     def clearWindow(self):
         self.cancelTimer()
@@ -124,6 +126,7 @@ class MathsQuiz:
     def generateQuestion(self):
         self.question_number += 1
         self.attempt = 1
+        self.current_answers = []
         self.num1 = self.randomInt(self.difficulty)
         self.num2 = self.randomInt(self.difficulty)
         self.operation = self.decideOperation()
@@ -180,6 +183,8 @@ class MathsQuiz:
             self.answer_entry.focus_set()
             return
 
+        self.current_answers.append(user_answer)
+
         if self.isCorrect(user_answer, self.correct_answer, self.attempt):
             self.score += POINTS_PER_ATTEMPT[self.attempt]
 
@@ -188,6 +193,7 @@ class MathsQuiz:
                 self.best_streak = max(self.best_streak, self.streak)
 
             self.updateStats()
+            self.recordQuestion(POINTS_PER_ATTEMPT[self.attempt])
             self.finishQuestion()
         else:
             self.handleMiss() 
@@ -238,6 +244,8 @@ class MathsQuiz:
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=10)
 
+        ttk.Button(button_frame, text="Review answers", command=self.displayReview).pack(side="left", padx=10)
+
         ttk.Button(button_frame, text="Play again", width=12, commad=self.playAgain,).pack(side="left", padx=10)
 
         ttk.Button(button_frame, text="Quit", font=("Arial", 12), width=12, command=self.quitQuiz,).pack(side="left", padx=10)
@@ -253,6 +261,7 @@ class MathsQuiz:
         self.num2 = 0
         self.operation = "+"
         self.correct_answer = 0
+        self.history = []
 
     def playAgain(self):
         self.resetQuiz()
@@ -298,6 +307,7 @@ class MathsQuiz:
 
     def timeUp(self):
         self.timer_job = None
+        self.current_answers.append(None)
 
         if self.attempt == 1:
             self.feedback_label.config(text="Time's up! Try once more!", fg=WARN)
@@ -315,7 +325,60 @@ class MathsQuiz:
             self.answer_entry.focus_set()
             self.startTimer()
         else:
-            self.finishQuestion()            
+            self.recordQuestion(0)
+            self.finishQuestion() 
+
+    def recordQuestion(self, points):
+        self.history.append({
+            "question": f"{self.num1} {self.operation} {self.num2} =",
+            "answers": list(self.current_answers),   #A copy of the list
+            "correct": self.correct_answer,
+            "points": points,
+        })   
+
+    def displayReview(self):
+        self.clearWindow()
+
+        tk.Label(self.root, text="Review your answers", font=("Arial", 20, "bold")).pack(pady=(20, 10))
+
+        table = tk.Frame(self.root)
+        table.pack()
+
+        #Heading row
+        headings = ["#", "Question", "Your answer", "Correct", "Points"]
+        for column, heading in enumerate(headings):
+            tk.Label(
+                table, text=heading, font=("Arial", 11, "bold"), fg=MUTED
+            ).grid(row=0, column=column, padx=12, pady=4)
+
+        #One row per question
+        for row, record in enumerate(self.history, start=1):
+            points = record["points"]
+            if points == POINTS_PER_ATTEMPT[1]:
+                points_colour = SUCCESS
+            elif points > 0:
+                points_colour = WARN
+            else:
+                points_colour = ERROR
+
+            #"4, 3" means the first answer was 4 and the second was 3
+            given = ", ".join(
+                "-" if answer is None else str(answer)
+                for answer in record["answers"]
+            )
+
+            values = [row, record["question"], given, record["correct"], points]
+            for column, value in enumerate(values):
+                colour = points_colour if column == 4 else TEXT
+                tk.Label(
+                    table, text=value, font=("Arial", 11), fg=colour
+                ).grid(row=row, column=column, padx=12, pady=2)
+
+        ttk.Button(
+            self.root,
+            text="Back to results",
+            command=lambda: self.displayResults(self.score),
+        ).pack(pady=15)                            
 
 def main():
     root = tk.Tk()

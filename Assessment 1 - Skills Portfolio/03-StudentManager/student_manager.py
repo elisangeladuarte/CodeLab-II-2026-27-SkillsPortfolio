@@ -39,6 +39,14 @@ TEXT = "#E8F1F2"
 MUTED = "#8FA3A8"
 ERROR = "#FF6B7A"
 SUCCESS = "#3DDC97"
+#Row background for each grade in the table
+GRADE_COLOURS = {
+    "A": "#12372B",
+    "B": "#12333F",
+    "C": "#39351A",
+    "D": "#3A2B1A",
+    "F": "#3B1C25",
+}
 #Sort choices: label shown to the user -> function that gives the sort key
 SORT_KEYS = {
     "Name": lambda student: student.name.lower(),
@@ -212,7 +220,7 @@ class StudentManager:
         self.root = root
         self.root.title(WINDOW_TITLE)
         self.root.geometry(WINDOW_SIZE)
-        self.root.minsize(1000, 850)
+        self.root.minsize(1000, 800)
         self.setupStyle()   
 
         #Student records
@@ -360,6 +368,10 @@ class StudentManager:
             self.table.column(heading, width=width, anchor=alignment)
         self.table.grid(row=0, column=0, sticky="nsew")
 
+        #One tag per grade, so each row can be tinted by its grade
+        for grade, colour in GRADE_COLOURS.items():
+            self.table.tag_configure(grade, background=colour)
+
         scrollbar = ttk.Scrollbar(display_frame, orient="vertical", command=self.table.yview)
         self.table.configure(yscrollcommand=scrollbar.set)
         scrollbar.grid(row=0, column=1, sticky="ns")
@@ -390,6 +402,7 @@ class StudentManager:
                     f"{student.percentage:.1f}%",
                     student.grade,
                 ),
+                tags=(student.grade,), #Picks the row colour from GRADE_COLOURS
             )
 
         if summary is None:

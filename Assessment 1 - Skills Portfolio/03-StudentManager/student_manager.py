@@ -55,6 +55,15 @@ SORT_KEYS = {
     "Exam mark": lambda student: student.exam,
     "Overall percentage": lambda student: student.percentage,
 }
+#Table heading -> (sort key name from SORT_KEYS, True if the first click sorts high to low)
+COLUMN_SORT = {
+    "Name": ("Name", False),
+    "Number": ("Student number", False),
+    "Coursework (/60)": ("Coursework total", True),
+    "Exam (/100)": ("Exam mark", True),
+    "Percentage": ("Overall percentage", True),
+    "Grade": ("Overall percentage", True), #Grades follow the percentage, so A is first
+}
 
 class Student:
 
@@ -229,6 +238,11 @@ class StudentManager:
             self.reportProblems(problems)
 
         self.createWidgets()
+
+        #What the table is showing, and which heading it is sorted by
+        self.shown_students = []
+        self.sort_column = None
+        self.sort_descending = False
     
         self.placeholder = tk.Label(self.root, text="Student Manager", font=("Arial", 24, "bold"))
         self.placeholder.grid(row=0, column=0, pady=200)
@@ -364,7 +378,7 @@ class StudentManager:
         headings = [heading for heading, _, _ in TABLE_COLUMNS]
         self.table = ttk.Treeview(display_frame, columns=headings, show="headings", selectmode="browse")
         for heading, width, alignment in TABLE_COLUMNS:
-            self.table.heading(heading, text=heading)
+            self.table.heading(heading, text=heading, command=lambda heading=heading: self.sortByColumn(heading))
             self.table.column(heading, width=width, anchor=alignment)
         self.table.grid(row=0, column=0, sticky="nsew")
 
@@ -386,9 +400,14 @@ class StudentManager:
 
     def clearTable(self):
         self.table.delete(*self.table.get_children())
+        self.shown_students = []
         
     def showStudents(self, students, summary=None):
         self.clearTable()
+        self.shown_students = students #Remembering so heading can re-sort them
+        if not keep_sort:
+            self.sort_column = None
+        self.updateHeadings()
 
         for student in students:
             self.table.insert(
@@ -502,6 +521,30 @@ class StudentManager:
 
     def showLowest(self):
         self.showExtreme(highest=False)    
+
+    def updateHeadings(self):
+        for heading, _, _ in TABLE_COLUMNS:
+            text = heading
+            if heading == self.sort_column:
+                text += "  \u25bc" if self.sort_descending else "  \u25b2" #Down / up arrow
+            self.table.heading(heading, text=text)
+
+    def sortByColumn(self, heading):
+        if not self.shown_students:
+            return #Nothing on screen to sort
+
+        key_name, first_descending = COLUMN_SORT[heading]
+        if heading == self.sort_column:
+            self.sort_descending = not self.sort_descending
+        else:
+            self.sort_column = heading
+            self.sort_descending = first_descending
+
+        ordered = sortStudents(self.shown_students, key_name, self.sort_descending)
+        #Keep the summary text that is already showing
+        self.showStudents(
+            ordered, summary=self.summary_label.cget("text"), keep_sort=True
+        )
 
     def chooseSortOrder(self):
         result = None

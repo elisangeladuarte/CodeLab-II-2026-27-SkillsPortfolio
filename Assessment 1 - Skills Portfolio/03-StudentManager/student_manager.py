@@ -223,6 +223,13 @@ def findExtremes(students, highest=True):
 def sortStudents(students, key_name, descending=False):
     return sorted(students, key=SORT_KEYS[key_name], reverse=descending)
 
+def searchStudents(students, text):
+    text = text.lower()
+    return [
+        student for student in students
+        if text in student.name.lower() or text in str(student.code)
+    ]
+
 class StudentManager:
 
     def __init__(self, root):
@@ -236,6 +243,11 @@ class StudentManager:
         self.students, problems = loadStudents(DATA_FILE)
         if problems:
             self.reportProblems(problems)
+
+        #The search box text. The trace runs onSearchChange on every keystroke.
+        self.search_var = tk.StringVar()
+        self.ignore_search = False #True while the program itself changes the text
+        self.search_var.trace_add("write", self.onSearchChange)
 
         self.createWidgets()
 
@@ -367,20 +379,35 @@ class StudentManager:
             ("8. Update a student record", self.updateStudent),
         ]
         for text, handler in menu_options:
-            ttk.Button(menu_frame, text=text, width=28, style="Menu.TButton", command=handler,).pack(pady=3)
+            ttk.Button(menu_frame, text=text, width=28, style="Menu.TButton", command=lambda handler=handler: self.runOption(handler),).pack(pady=3)
 
         #Results area
         display_frame = tk.Frame(self.root, padx=10, pady=15)
         display_frame.grid(row=0, column=1, sticky="nsew")
         display_frame.columnconfigure(0, weight=1)
-        display_frame.rowconfigure(0, weight=1)
+        display_frame.rowconfigure(1, weight=1) #The table takes the spare height
+
+        #Search box above the table: it filters the rows as you type
+        search_frame = tk.Frame(display_frame)
+        search_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+
+        tk.Label(search_frame, text="Search name or number:").pack(side="left")
+        self.search_entry = tk.Entry(
+            search_frame, textvariable=self.search_var, font=("Arial", 12), width=28
+        )
+        self.search_entry.pack(side="left", padx=10, ipady=4)
+        self.clear_button = ttk.Button(
+            search_frame, text="Clear", width=8,
+            command=lambda: self.search_var.set(""),
+        )
+        self.clear_button.pack(side="left")
 
         headings = [heading for heading, _, _ in TABLE_COLUMNS]
         self.table = ttk.Treeview(display_frame, columns=headings, show="headings", selectmode="browse")
         for heading, width, alignment in TABLE_COLUMNS:
             self.table.heading(heading, text=heading, command=lambda heading=heading: self.sortByColumn(heading))
             self.table.column(heading, width=width, anchor=alignment)
-        self.table.grid(row=0, column=0, sticky="nsew")
+        self.table.grid(row=1, column=0, sticky="nsew")
 
         #One tag per grade, so each row can be tinted by its grade
         for grade, colour in GRADE_COLOURS.items():
@@ -388,15 +415,17 @@ class StudentManager:
 
         scrollbar = ttk.Scrollbar(display_frame, orient="vertical", command=self.table.yview)
         self.table.configure(yscrollcommand=scrollbar.set)
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        scrollbar.grid(row=1, column=1, sticky="ns")
 
         #Summary
         self.summary_label = tk.Label(display_frame, text="Choose an option from the menu.", font=("Arial", 11), anchor="w",)
-        self.summary_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        self.summary_label.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
 
         #Without any data there is nothing to show
         if not self.students:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
+            self.search_entry.config(state="disabled")
+            self.clear_button.config(state="disabled")
 
     def clearTable(self):
         self.table.delete(*self.table.get_children())
@@ -436,7 +465,38 @@ class StudentManager:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
         self.showStudents(self.students)
-        
+    
+    #Search
+    def onSearchChange(self, *args):
+        if self.ignore_search:
+            return #The program cleared the box itself, so don't search
+
+        text = self.search_var.get().strip()
+        if not text:
+            self.viewAll() #An empty box means "show everyone"
+            return
+
+        matches = searchStudents(self.students, text)
+
+        #If a heading sort is active, keep the matches in that order
+        keep_sort = self.sort_column is not None
+        if keep_sort:
+            key_name, _ = COLUMN_SORT[self.sort_column]
+            matches = sortStudents(matches, key_name, self.sort_descending)
+
+        if matches:
+            summary = f"{len(matches)} of {len(self.students)} students match \"{text}\"."
+        else:
+            summary = f"No students match \"{text}\"."
+        self.showStudents(matches, summary=summary, keep_sort=keep_sort)
+
+    def runOption(self, handler):
+        self.ignore_search = True #Changing the text must not trigger a search
+        self.search_var.set("")
+        self.ignore_search = False
+        handler() 
+      
+    #Dialogs        
     def chooseStudent(self, title, prompt):
         #Alphabetical order makes a long list easier to scan
         if not self.students:

@@ -18,6 +18,8 @@ MAX_CODE = 9999
 FIELDS_PER_LINE = COURSEWORK_COUNT + 3
 # Maximum number of file problems listed in the warning popup
 MAX_PROBLEMS_SHOWN = 5
+#How many changes can be undone
+MAX_UNDO = 10
 #Grade boundaries: minimum percentage, grade, checked from highest to lowest
 GRADE_BOUNDARIES = [(70, "A"), (60, "B"), (50, "C"), (40, "D"), (0, "F")]
 #Table columns: (heading, width in pixels, text alignment)
@@ -80,6 +82,8 @@ class Student:
         self.name = name
         self.coursework = coursework
         self.exam = exam
+        # Earlier versions of the student list, newest last, for the undo option
+        self.undo_stack = []
 
     @property
     def coursework_total(self):
@@ -391,6 +395,7 @@ class StudentManager:
             ("6. Add a student record", self.addStudent),
             ("7. Delete a student record", self.deleteStudent),
             ("8. Update a student record", self.updateStudent),
+            ("9. Undo last change", self.undoLast),
         ]
         for text, handler in menu_options:
             ttk.Button(menu_frame, text=text, width=28, style="Menu.TButton", command=lambda handler=handler: self.runOption(handler),).pack(pady=3)
@@ -456,7 +461,7 @@ class StudentManager:
         self.table.delete(*self.table.get_children())
         self.shown_students = []
         
-    def showStudents(self, students, summary=None):
+    def showStudents(self, students, summary=None, keep_sort=False):
         self.clearTable()
         self.shown_students = students #Remembering so heading can re-sort them
         if not keep_sort:
@@ -789,10 +794,12 @@ class StudentManager:
         if student is None:
             return #Cancelled
 
+        before = list(self.students)
         self.students.append(student)
         if not saveStudents(DATA_FILE, self.students):
             self.students.remove(student) #Keep memory and file in step
             return
+        self.rememberUndo(before)
 
         self.showStudents(
             [student],
@@ -820,12 +827,14 @@ class StudentManager:
             return
 
         #Remember the position so the record can be put back if saving fails
+        before = list(self.students)
         position = self.students.index(student)
         self.students.remove(student)
 
         if not saveStudents(DATA_FILE, self.students):
             self.students.insert(position, student) #Keep memory and file in step
             return
+        self.rememberUndo(before)
 
         self.clearTable()
         self.summary_label.config(
@@ -850,16 +859,40 @@ class StudentManager:
             return #Cancelled
 
         #Swap the old record for the new one, keeping its position in the list
+        before=list(self.students)
         position = self.students.index(student)
         self.students[position] = updated
 
         if not saveStudents(DATA_FILE, self.students):
             self.students[position] = student #Keep memory and file in step
             return
+        self.rememberUndo(before)
+
+    def rememberUndo(self, before):
+        self.undo_stack.append(before)
+        if len(self.undo_stack) > MAX_UNDO:
+            self.undo_stack.pop(0)   # forget the oldest change
+
+    def undoLast(self):
+        if not self.undo_stack:
+            self.summary_label.config(text="Nothing to undo.", fg=MUTED)
+            return
+
+        previous = self.undo_stack.pop()
+        current = self.students
+        self.students = previous
+
+        if not saveStudents(DATA_FILE, self.students):
+            self.students = current #Keep memory and file in step
+            self.undo_stack.append(previous) #The undo didn't happen, so keep it
+            return
 
         self.showStudents(
-            [updated],
-            summary=f"Updated the record for {updated.name}.",
+            self.students,
+            summary=(
+                "Last change undone. "
+                f"The class now has {len(self.students)} students."
+            ),
         )
 
 def main():

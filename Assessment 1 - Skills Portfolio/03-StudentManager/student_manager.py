@@ -47,6 +47,14 @@ GRADE_COLOURS = {
     "D": "#3A2B1A",
     "F": "#3B1C25",
 }
+#Bar colour for each grade in the chart (brighter than the row tints)
+GRADE_BAR_COLOURS = {
+    "A": "#3DDC97",
+    "B": "#4CC9F0",
+    "C": "#FFD166",
+    "D": "#FFA94D",
+    "F": "#FF6B7A",
+}
 #Sort choices: label shown to the user -> function that gives the sort key
 SORT_KEYS = {
     "Name": lambda student: student.name.lower(),
@@ -223,6 +231,12 @@ def findExtremes(students, highest=True):
 def sortStudents(students, key_name, descending=False):
     return sorted(students, key=SORT_KEYS[key_name], reverse=descending)
 
+def countGrades(students):
+    counts = {grade: 0 for _, grade in GRADE_BOUNDARIES}
+    for student in students:
+        counts[student.grade] += 1
+    return counts
+
 def searchStudents(students, text):
     text = text.lower()
     return [
@@ -381,6 +395,17 @@ class StudentManager:
         for text, handler in menu_options:
             ttk.Button(menu_frame, text=text, width=28, style="Menu.TButton", command=lambda handler=handler: self.runOption(handler),).pack(pady=3)
 
+        #Grade chart under the menu
+        tk.Label(
+            menu_frame, text="GRADES", font=("Arial", 10, "bold"), fg=MUTED
+        ).pack(pady=(25, 5))
+        #The small width lets the menu buttons decide how wide the menu is
+        self.chart_canvas = tk.Canvas(
+            menu_frame, width=100, height=170, bg=CARD, highlightthickness=0
+        )
+        self.chart_canvas.pack(fill="x")
+        self.chart_canvas.bind("<Configure>", self.drawChart)   # redraw when resized
+
         #Results area
         display_frame = tk.Frame(self.root, padx=10, pady=15)
         display_frame.grid(row=0, column=1, sticky="nsew")
@@ -465,7 +490,44 @@ class StudentManager:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
         self.showStudents(self.students)
-    
+
+    #Chart
+    def drawChart(self, event=None):
+        canvas = self.chart_canvas
+        canvas.delete("all") #Wipe the old chart before drawing the new one
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+
+        counts = countGrades(self.students)
+        biggest = max(counts.values())
+        if biggest == 0 or width < 20:
+            canvas.create_text(width / 2, height / 2, text="No data", fill=MUTED)
+            return
+
+        top = 22 #Room for the number above the tallest bar
+        baseline = height - 24 #The bars stand on this line, with room for letters
+        plot_height = baseline - top
+        slot = width / len(counts) #The width given to each bar
+        bar_width = slot * 0.6
+
+        for position, (grade, count) in enumerate(counts.items()):
+            left = position * slot + (slot - bar_width) / 2
+            centre = left + bar_width / 2
+            bar_height = plot_height * count / biggest
+
+            if count > 0:
+                canvas.create_rectangle(
+                    left, baseline - bar_height, left + bar_width, baseline,
+                    fill=GRADE_BAR_COLOURS[grade], width=0,
+                )
+            canvas.create_text(
+                centre, baseline - bar_height - 10, text=str(count),
+                fill=TEXT, font=("Arial", 10, "bold"),
+            )
+            canvas.create_text(
+                centre, height - 11, text=grade, fill=MUTED, font=("Arial", 11, "bold")
+            )
+
     #Search
     def onSearchChange(self, *args):
         if self.ignore_search:
@@ -495,6 +557,7 @@ class StudentManager:
         self.search_var.set("")
         self.ignore_search = False
         handler() 
+        self.drawChart() #The option may have added, deleted or changed a student
       
     #Dialogs        
     def chooseStudent(self, title, prompt):

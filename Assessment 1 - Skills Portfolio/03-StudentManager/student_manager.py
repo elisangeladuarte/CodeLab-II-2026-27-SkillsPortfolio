@@ -4,7 +4,7 @@ from tkinter import messagebox, ttk
 
 #Constants
 WINDOW_TITLE = "Student Manager"
-WINDOW_SIZE = "950x6520"
+WINDOW_SIZE = "1100x660"
 #Build the path from this script's location so it works from any folder
 DATA_FILE = Path(__file__).parent / "studentMarks.txt"
 #Maximum marks available (3 coursework marks of 20, plus an exam out of 100)
@@ -24,11 +24,21 @@ GRADE_BOUNDARIES = [(70, "A"), (60, "B"), (50, "C"), (40, "D"), (0, "F")]
 TABLE_COLUMNS = [
     ("Name", 200, "w"),
     ("Number", 80, "center"),
-    ("Coursework (/60)", 120, "center"),
+    ("Coursework (/60)", 140, "center"),
     ("Exam (/100)", 100, "center"),
     ("Percentage", 100, "center"),
     ("Grade", 70, "center"),
 ]
+#Colours
+BG = "#0F1923" #Window background
+CARD = "#17242F" #Table, entry boxes and menu buttons
+BORDER = "#26384A" #Table headings and borders
+ACCENT = "#2EC4B6"
+ACCENT_HOVER = "#5ED8CC"
+TEXT = "#E8F1F2"
+MUTED = "#8FA3A8"
+ERROR = "#FF6B7A"
+SUCCESS = "#3DDC97"
 #Sort choices: label shown to the user -> function that gives the sort key
 SORT_KEYS = {
     "Name": lambda student: student.name.lower(),
@@ -44,7 +54,7 @@ class Student:
         self.code = code
         self.name = name
         self.coursework = coursework
-        self.exam = exam   
+        self.exam = exam
 
     @property
     def coursework_total(self):
@@ -202,6 +212,8 @@ class StudentManager:
         self.root = root
         self.root.title(WINDOW_TITLE)
         self.root.geometry(WINDOW_SIZE)
+        self.root.minsize(1000, 850)
+        self.setupStyle()   
 
         #Student records
         self.students, problems = loadStudents(DATA_FILE)
@@ -212,6 +224,97 @@ class StudentManager:
     
         self.placeholder = tk.Label(self.root, text="Student Manager", font=("Arial", 24, "bold"))
         self.placeholder.grid(row=0, column=0, pady=200)
+
+    def setupStyle(self):
+        self.root.configure(bg=BG)
+
+        #Default colours for plain Tkinter widgets created from now on
+        defaults = {
+            "*Label.background": BG,
+            "*Label.foreground": TEXT,
+            "*Frame.background": BG,
+            "*Toplevel.background": BG,
+            "*Entry.background": CARD,
+            "*Entry.foreground": TEXT,
+            "*Entry.insertBackground": TEXT,
+            "*Entry.relief": "flat",
+            "*Entry.highlightThickness": 1,
+            "*Entry.highlightBackground": BORDER,
+            "*Entry.highlightColor": ACCENT,
+            "*Radiobutton.background": BG,
+            "*Radiobutton.foreground": TEXT,
+            "*Radiobutton.activeBackground": BG,
+            "*Radiobutton.activeForeground": TEXT,
+            "*Radiobutton.selectColor": CARD,
+            "*Radiobutton.highlightThickness": 0,
+            #The drop-down list that opens from a Combobox
+            "*TCombobox*Listbox.background": CARD,
+            "*TCombobox*Listbox.foreground": TEXT,
+            "*TCombobox*Listbox.selectBackground": ACCENT,
+            "*TCombobox*Listbox.selectForeground": BG,
+        }
+        for pattern, value in defaults.items():
+            self.root.option_add(pattern, value)
+
+        #"clam" is a ttk theme that lets us colour widgets on every system
+        style = ttk.Style()
+        style.theme_use("clam")
+
+        style.configure(
+            "TButton", background=ACCENT, foreground=BG,
+            font=("Arial", 11), padding=8, borderwidth=0,
+        )
+        style.map(
+            "TButton",
+            background=[("active", ACCENT_HOVER), ("disabled", CARD)],
+            foreground=[("disabled", MUTED)],
+        )
+
+        #The menu buttons: dark, left-aligned, and teal when the mouse is over them
+        style.configure(
+            "Menu.TButton", background=CARD, foreground=TEXT,
+            anchor="w", padding=(14, 8),
+        )
+        style.map(
+            "Menu.TButton",
+            background=[("active", ACCENT)],
+            foreground=[("active", BG)],
+        )
+
+        style.configure(
+            "TCombobox", fieldbackground=CARD, background=CARD, foreground=TEXT,
+            arrowcolor=TEXT, bordercolor=BORDER, lightcolor=CARD, darkcolor=CARD,
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", CARD)],
+            foreground=[("readonly", TEXT)],
+            selectbackground=[("readonly", CARD)],
+            selectforeground=[("readonly", TEXT)],
+        )
+
+        #The results table
+        style.configure(
+            "Treeview", background=CARD, fieldbackground=CARD, foreground=TEXT,
+            rowheight=28, borderwidth=0, font=("Arial", 11),
+            bordercolor=BG, lightcolor=BG, darkcolor=BG,
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", ACCENT)],
+            foreground=[("selected", BG)],
+        )
+        style.configure(
+            "Treeview.Heading", background=BORDER, foreground=TEXT,
+            font=("Arial", 11, "bold"), padding=6, borderwidth=0,
+        )
+        style.map("Treeview.Heading", background=[("active", CARD)])
+
+        style.configure(
+            "TScrollbar", background=ACCENT, troughcolor=CARD, arrowcolor=BG,
+            bordercolor=CARD, lightcolor=ACCENT, darkcolor=ACCENT,
+        )
+        style.map("TScrollbar", background=[("active", ACCENT_HOVER)])        
 
     def reportProblems(self, problems):
         shown = problems[:MAX_PROBLEMS_SHOWN]
@@ -242,7 +345,7 @@ class StudentManager:
             ("8. Update a student record", self.updateStudent),
         ]
         for text, handler in menu_options:
-            tk.Button(menu_frame, text=text, font=("Arial", 10), width=32, anchor="w", command=handler,).pack(pady=3)
+            ttk.Button(menu_frame, text=text, width=28, style="Menu.TButton", command=handler,).pack(pady=3)
 
         #Results area
         display_frame = tk.Frame(self.root, padx=10, pady=15)
@@ -267,7 +370,7 @@ class StudentManager:
 
         #Without any data there is nothing to show
         if not self.students:
-            self.summary_label.config(text="No student records loaded.", fg="red")
+            self.summary_label.config(text="No student records loaded.", fg=ERROR)
 
     def clearTable(self):
         self.table.delete(*self.table.get_children())
@@ -294,11 +397,11 @@ class StudentManager:
                 f"Students in class: {len(students)}    "
                 f"Average percentage: {averagePercentage(students):.1f}%"
             )
-        self.summary_label.config(text=summary, fg="black")
+        self.summary_label.config(text=summary, fg=TEXT)
 
     def viewAll(self):
         if not self.students:
-            self.summary_label.config(text="No student records loaded.", fg="red")
+            self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
         self.showStudents(self.students)
         
@@ -332,8 +435,8 @@ class StudentManager:
 
         button_frame = tk.Frame(dialog)
         button_frame.pack(pady=(10, 15))
-        tk.Button(button_frame, text="OK", width=10, command=confirm).pack(side="left", padx=5)
-        tk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="OK", width=10, command=confirm).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(side="left", padx=5)
 
         dialog.bind("<Return>", lambda event: confirm())
         dialog.bind("<Escape>", lambda event: dialog.destroy())
@@ -347,7 +450,7 @@ class StudentManager:
 
     def viewIndividual(self):
         if not self.students:
-            self.summary_label.config(text="No student records loaded.", fg="red")
+            self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
 
         student = self.chooseStudent(
@@ -365,7 +468,7 @@ class StudentManager:
             highest (bool): True for the highest total, False for the lowest.
         """
         if not self.students:
-            self.summary_label.config(text="No student records loaded.", fg="red")
+            self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
 
         matches = findExtremes(self.students, highest)
@@ -413,8 +516,8 @@ class StudentManager:
 
         button_frame = tk.Frame(dialog)
         button_frame.pack(pady=(10, 15))
-        tk.Button(button_frame, text="OK", width=10, command=confirm).pack(side="left", padx=5)
-        tk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="OK", width=10, command=confirm).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(side="left", padx=5)
 
         dialog.bind("<Return>", lambda event: confirm())
         dialog.bind("<Escape>", lambda event: dialog.destroy())
@@ -427,7 +530,7 @@ class StudentManager:
 
     def showSorted(self):
         if not self.students:
-            self.summary_label.config(text="No student records loaded.", fg="red")
+            self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
 
         choice = self.chooseSortOrder()
@@ -470,11 +573,10 @@ class StudentManager:
             entry.grid(row=row, column=1, padx=(0, 20), pady=4)
             entries.append(entry)
 
-        error_label = tk.Label(dialog, text="", fg="red", wraplength=300)
+        error_label = tk.Label(dialog, text="", fg=ERROR, wraplength=300)
         error_label.grid(row=len(labels), column=0, columnspan=2, pady=(5, 0))
 
         def confirm():
-            """Save button: validate the form and close it if everything is valid."""
             nonlocal result
             name, code, m1, m2, m3, exam = (entry.get().strip() for entry in entries)
             try:
@@ -486,10 +588,10 @@ class StudentManager:
 
         button_frame = tk.Frame(dialog)
         button_frame.grid(row=len(labels) + 1, column=0, columnspan=2, pady=15)
-        tk.Button(button_frame, text="Save", width=10, command=confirm).pack(
+        ttk.Button(button_frame, text="Save", width=10, command=confirm).pack(
             side="left", padx=5
         )
-        tk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(
+        ttk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(
             side="left", padx=5
         )
 
@@ -504,7 +606,6 @@ class StudentManager:
         return result
 
     def addStudent(self):
-        """Option 6: add a new student and save the file."""
         student = self.askStudentDetails("Add a student record")
         if student is None:
             return #Cancelled
@@ -521,7 +622,7 @@ class StudentManager:
 
     def deleteStudent(self):
         if not self.students:
-            self.summary_label.config(text="No student records to delete.", fg="red")
+            self.summary_label.config(text="No student records to delete.", fg=ERROR)
             return
 
         student = self.chooseStudent(
@@ -549,11 +650,11 @@ class StudentManager:
 
         self.clearTable()
         self.summary_label.config(
-            text=f"Deleted {student.name}. The class now has " f"{len(self.students)} students.", fg="black",)           
+            text=f"Deleted {student.name}. The class now has " f"{len(self.students)} students.", fg=TEXT,)           
 
     def updateStudent(self):
         if not self.students:
-            self.summary_label.config(text="No student records to update.", fg="red")
+            self.summary_label.config(text="No student records to update.", fg=ERROR)
             return
 
         student = self.chooseStudent(

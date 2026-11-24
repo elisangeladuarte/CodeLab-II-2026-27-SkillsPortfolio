@@ -527,9 +527,9 @@ class MathsQuiz:
         self.updateStats()
         self.startTimer()
 
-    def makeTile(self, parent, caption, pady):
+    def makeTile(self, parent, caption, pady=0, side="top", padx=0):
         tile = Card(parent, width=RING_SIZE, height=108, radius=26)
-        tile.pack(pady=pady)
+        tile.pack(pady=pady, side=side, padx=padx)
         tk.Label(
             tile.body, text=caption, font=(FONT, 9, "bold"), fg=MUTED, bg=CARD
         ).pack(pady=(8, 0))
@@ -726,33 +726,22 @@ class MathsQuiz:
     def displayResults(self, score):
         self.clearWindow()
 
-        tk.Label(self.root, text="Quiz Complete!", font=("Arial", 24, "bold")).pack(
-            pady=(40, 10)
-        )
+        page = tk.Frame(self.root)
+        page.pack(expand=True)
 
+        tk.Label(page, text="Quiz Complete!", font=(FONT, 30, "bold")).pack()
+        level_name = DIFFICULTY_LEVELS[self.difficulty]
         tk.Label(
-            self.root,
-            text=f"Your score: {score} / {TOTAL_QUESTIONS * 10}",
-            font=("Arial", 16),
-        ).pack(pady=5)
-
-        tk.Label(
-            self.root,
-            text=f"Best streak: {self.best_streak}",
-            font=("Arial", 12),
+            page,
+            text=f"{self.player_name} \u00b7 {level_name}",
+            font=(FONT, 11),
             fg=MUTED,
-        ).pack()
+        ).pack(pady=(4, 18))
 
-        tk.Label(
-            self.root,
-            text=f"Grade: {self.getGrade(score)}",
-            font=("Arial", 28, "bold"),
-        ).pack(pady=15)
-
+        # A rounded banner that says how the score did on the leaderboard
         if self.rank == 1:
             message, colour = "New high score!", WARN
         elif self.rank is not None:
-            level_name = DIFFICULTY_LEVELS[self.difficulty]
             message = f"You placed #{self.rank} on the {level_name} leaderboard."
             colour = TEXT
         else:
@@ -761,136 +750,198 @@ class MathsQuiz:
         if not self.saved_ok:
             message += " (The leaderboard file couldn't be saved.)"
 
-        tk.Label(self.root, text=message, font=("Arial", 12), fg=colour).pack(pady=5)
+        banner = Card(page, width=560, height=40, radius=18)
+        banner.pack(pady=(0, 18))
+        tk.Label(banner.body, text=message, font=(FONT, 11), fg=colour, bg=CARD).pack(
+            expand=True
+        )
 
-        tk.Label(
-            self.root,
-            text="Would you like to play gain?",
-            font=("Arial", 12),
-        ).pack(pady=(10, 5))
+        # Three tiles side by side
+        tiles = tk.Frame(page)
+        tiles.pack(pady=(0, 22))
 
-        button_frame = tk.Frame(self.root)
-        button_frame.pack(pady=10)
+        number, note = self.makeTile(tiles, "FINAL SCORE", side="left", padx=8)
+        number.config(text=str(score))
+        note.config(text=f"out of {TOTAL_QUESTIONS * 10}")
 
-        ttk.Button(
-            button_frame, text="Review answers", command=self.displayReview
-        ).pack(side="left", padx=10)
+        number, note = self.makeTile(tiles, "BEST STREAK", side="left", padx=8)
+        number.config(text=str(self.best_streak))
+        note.config(text="first tries in a row")
 
-        ttk.Button(
-            button_frame,
-            text="Leaderboard",
-            command=lambda: self.displayLeaderboard(
+        number, note = self.makeTile(tiles, "GRADE", side="left", padx=8)
+        number.config(text=self.getGrade(score), fg=ACCENT_SOFT)
+
+        # Buttons sit side by side inside a frame
+        buttons = tk.Frame(page)
+        buttons.pack()
+
+        RoundedButton(buttons, "Review answers", self.displayReview, width=150).pack(
+            side="left", padx=6
+        )
+
+        # Dark buttons use the same options, so keep them in one dictionary
+        quiet = dict(
+            width=150,
+            fill=BG,
+            hover=CARD_HOVER,
+            outline=BORDER,
+            hover_outline=ACCENT,
+            text_colour=TEXT,
+        )
+        RoundedButton(
+            buttons,
+            "Leaderboard",
+            lambda: self.displayLeaderboard(
                 self.difficulty, lambda: self.displayResults(self.score)
             ),
-        ).pack(side="left", padx=10)
-
-        ttk.Button(
-            button_frame,
-            text="Play again",
-            width=12,
-            commad=self.playAgain,
-        ).pack(side="left", padx=10)
-
-        ttk.Button(
-            button_frame,
-            text="Quit",
-            font=("Arial", 12),
-            width=12,
-            command=self.quitQuiz,
-        ).pack(side="left", padx=10)
+            **quiet,
+        ).pack(side="left", padx=6)
+        RoundedButton(buttons, "Play again", self.playAgain, **quiet).pack(
+            side="left", padx=6
+        )
+        RoundedButton(buttons, "Quit", self.quitQuiz, **quiet).pack(side="left", padx=6)
 
     def displayReview(self):
         self.clearWindow()
 
-        tk.Label(
-            self.root, text="Review your answers", font=("Arial", 20, "bold")
-        ).pack(pady=(20, 10))
+        page = tk.Frame(self.root)
+        page.pack(expand=True)
 
-        table = tk.Frame(self.root)
-        table.pack()
+        tk.Label(page, text="Review your answers", font=(FONT, 24, "bold")).pack(
+            pady=(0, 10)
+        )
+
+        # Column widths (in pixels) shared by the heading row and every row
+        widths = [50, 190, 170, 100, 90]
 
         # Heading row
-        headings = ["#", "Question", "Your answer", "Correct", "Points"]
-        for column, heading in enumerate(headings):
-            tk.Label(table, text=heading, font=("Arial", 11, "bold"), fg=MUTED).grid(
-                row=0, column=column, padx=12, pady=4
-            )
+        heading_row = tk.Frame(page)
+        heading_row.pack(padx=(0, 24))  # Lines the headings up with the row text
+        for column, heading in enumerate(
+            ["", "QUESTION", "YOUR ANSWER", "CORRECT", "POINTS"]
+        ):
+            heading_row.columnconfigure(column, minsize=widths[column])
+            tk.Label(
+                heading_row,
+                text=heading,
+                font=(FONT, 9, "bold"),
+                fg=MUTED,
+                anchor="w",
+            ).grid(row=0, column=column, sticky="w")
 
-        # One row per question
-        for row, record in enumerate(self.history, start=1):
+        # One rounded row per question
+        for record in self.history:
             points = record["points"]
             if points == POINTS_PER_ATTEMPT[1]:
-                points_colour = SUCCESS
+                points_colour, icon = SUCCESS, "\u2713"
             elif points > 0:
-                points_colour = WARN
+                points_colour, icon = WARN, "\u2713"  # Right, but on the second try
             else:
-                points_colour = ERROR
+                points_colour, icon = ERROR, "\u2717"
 
             # "4, 3" means the first answer was 4 and the second was 3
             given = ", ".join(
                 "-" if answer is None else str(answer) for answer in record["answers"]
             )
 
-            values = [row, record["question"], given, record["correct"], points]
-            for column, value in enumerate(values):
-                colour = points_colour if column == 4 else TEXT
-                tk.Label(table, text=value, font=("Arial", 11), fg=colour).grid(
-                    row=row, column=column, padx=12, pady=2
-                )
+            row = Card(page, width=640, height=36, radius=16)
+            row.pack(pady=2)
 
-        ttk.Button(
-            self.root,
-            text="Back to results",
-            command=lambda: self.displayResults(self.score),
-        ).pack(pady=15)
+            values = [icon, record["question"], given, record["correct"], points]
+            for column, value in enumerate(values):
+                row.body.columnconfigure(column, minsize=widths[column])
+                colour = points_colour if column in (0, 4) else TEXT
+                tk.Label(
+                    row.body,
+                    text=value,
+                    font=(FONT, 11),
+                    fg=colour,
+                    bg=CARD,
+                    anchor="w",
+                ).grid(row=0, column=column, sticky="w")
+
+        RoundedButton(
+            page,
+            "Back to results",
+            lambda: self.displayResults(self.score),
+            width=200,
+            height=42,
+        ).pack(pady=(14, 0))
 
     def displayLeaderboard(self, level, back):
         self.clearWindow()
 
-        tk.Label(self.root, text="Leaderboard", font=("Arial", 20, "bold")).pack(
-            pady=(20, 10)
-        )
+        page = tk.Frame(self.root)
+        page.pack(expand=True)
 
-        # One button per difficulty. The one being shown is greyed out.
-        tabs = tk.Frame(self.root)
-        tabs.pack(pady=(0, 15))
+        tk.Label(page, text="Leaderboard", font=(FONT, 30, "bold")).pack(pady=(0, 14))
+
+        # One tab per difficulty. The one being shown is filled with purple.
+        tabs = tk.Frame(page)
+        tabs.pack(pady=(0, 16))
         for tab_level, name in DIFFICULTY_LEVELS.items():
-            state = "disabled" if tab_level == level else "normal"
-            ttk.Button(
+            chosen = tab_level == level
+            RoundedButton(
                 tabs,
-                text=name,
-                width=12,
-                state=state,
-                command=lambda tab_level=tab_level: self.displayLeaderboard(
-                    tab_level, back
-                ),
+                name,
+                lambda tab_level=tab_level: self.displayLeaderboard(tab_level, back),
+                width=120,
+                height=38,
+                fill=ACCENT if chosen else BG,
+                outline=ACCENT if chosen else BORDER,
+                hover=ACCENT_HOVER if chosen else CARD_HOVER,
+                hover_outline=ACCENT,
+                text_colour="white" if chosen else MUTED,
             ).pack(side="left", padx=4)
+
+        # Column widths (in pixels) shared by the heading row and every row
+        widths = [60, 220, 100, 110]
 
         entries = self.leaderboard[str(level)]
         if not entries:
-            tk.Label(self.root, text="No scores yet. Be the first!", fg=MUTED).pack(
-                pady=30
-            )
+            tk.Label(
+                page, text="No scores yet. Be the first!", fg=MUTED, font=(FONT, 12)
+            ).pack(pady=40)
         else:
-            table = tk.Frame(self.root)
-            table.pack()
-
-            headings = ["#", "Player", "Score", "Best streak"]
-            for column, heading in enumerate(headings):
+            heading_row = tk.Frame(page)
+            heading_row.pack(padx=(0, 34))  # lines the headings up with the row text
+            for column, heading in enumerate(["#", "PLAYER", "SCORE", "BEST STREAK"]):
+                heading_row.columnconfigure(column, minsize=widths[column])
                 tk.Label(
-                    table, text=heading, font=("Arial", 11, "bold"), fg=MUTED
-                ).grid(row=0, column=column, padx=15, pady=4)
+                    heading_row,
+                    text=heading,
+                    font=(FONT, 9, "bold"),
+                    fg=MUTED,
+                    anchor="w",
+                ).grid(row=0, column=column, sticky="w")
 
-            for row, entry in enumerate(entries, start=1):
-                # Highlight the row that was just added
-                colour = ACCENT_HOVER if entry is self.last_entry else TEXT
-                values = [row, entry["name"], entry["score"], entry["streak"]]
+            for position, entry in enumerate(entries, start=1):
+                # The row that was just added gets a purple highlight
+                latest = entry is self.last_entry
+                row = Card(
+                    page,
+                    width=540,
+                    height=40,
+                    radius=18,
+                    fill=CARD_HOVER if latest else CARD,
+                    outline=ACCENT if latest else BORDER,
+                )
+                row.pack(pady=3)
+
+                values = [position, entry["name"], entry["score"], entry["streak"]]
                 for column, value in enumerate(values):
-                    tk.Label(table, text=value, font=("Arial", 12), fg=colour).grid(
-                        row=row, column=column, padx=15, pady=2
-                    )
+                    row.body.columnconfigure(column, minsize=widths[column])
+                    colour = WARN if position == 1 and column == 0 else TEXT
+                    tk.Label(
+                        row.body,
+                        text=value,
+                        font=(FONT, 12),
+                        fg=colour,
+                        bg=CARD_HOVER if latest else CARD,
+                        anchor="w",
+                    ).grid(row=0, column=column, sticky="w")
 
-        ttk.Button(self.root, text="Back", command=back).pack(pady=20)
+        RoundedButton(page, "Back", back, width=160, height=42).pack(pady=(18, 0))
 
     # Replay and quit
     def playAgain(self):

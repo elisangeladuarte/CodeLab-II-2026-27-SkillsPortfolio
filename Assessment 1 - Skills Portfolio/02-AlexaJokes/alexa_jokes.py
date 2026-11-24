@@ -1,4 +1,5 @@
 import json
+import math
 import random
 import tkinter as tk
 from pathlib import Path
@@ -6,40 +7,61 @@ from tkinter import messagebox, ttk
 
 #Constants
 WINDOW_TITLE = "Alexa Tell Me a Joke"
-WINDOW_SIZE = "700x680"
-#Width in pixels at which long jokes wrap onto a new line
-WRAP_LENGTH = 600
-JOKES_FILE = Path(__file__).parent / "randomJokes.txt"
-# Favourite jokes are saved here so they are still there next time
-FAVOURITES_FILE = Path(__file__).parent / "myFavourites.json"
+WINDOW_SIZE = "1100x680"
 
-#Colors 
-BG = "#0B1220" #Window background
-CARD = "#141C2F" #Greyed-out button background
-ACCENT = "#2BB6F6" #Buttons and punchline
+# Size (in pixels) of the main drawing area (ring, joke and button bar)
+STAGE_WIDTH = 780
+STAGE_HEIGHT = 610
+
+# Colours (kept in one place so the whole look can be changed easily)
+BG = "#0A1020"        # Window background
+PANEL = "#101830"     # The favourites panel
+DOCK = "#0F1730"      # The bar of buttons at the bottom
+CARD = "#141E3A"      # Dark pill buttons and rows
+CARD_HOVER = "#1C2850"
+ACCENT = "#2BB6F6"    # Main button and the punchline
 ACCENT_HOVER = "#5CC8F8"
+BRIGHT = "#38D0FF"    # The glowing ring
+DARK = "#06101F"      # Dark text on the bright button
 TEXT = "#E8EEF9"
 MUTED = "#8A96B0"
+OFF = "#55607A"       # text on a disabled button
 ERROR = "#FF6B7A"
 SUCCESS = "#3DDC97"
+STAR = "#F5B83D"
+BUBBLE_EDGE = "#4F6FE8"   # outline of the joke bubble
+BUBBLE_FILL = "#0F1730"
+WAVE_1 = "#0C1530"        # the two soft waves in the background
+WAVE_2 = "#0B1228"
 
-#Animation timings (in milliseconds)
-TYPE_DELAY_MS = 35 #Pause between typed letters
-DRUM_ROLL_STEPS = 5 #How many times the drum roll dots change
-DRUM_ROLL_DELAY_MS = 300 #Pause between drum roll steps
-PULSE_DELAY_MS = 100 #Pause between steps of the ring pulse
-THINKING_STEPS = 9 #How many pulse steps before the joke appears
+# Fonts
+FONT = "Segoe UI"         # falls back to a default font if it isn't installed
+MONO = "Consolas"         # the joke text looks like it is being typed
 
-#The Echo ring 
-RING_SIZE = 110
-RING_WIDTHS = [4, 6, 8, 10, 8, 6] #Ring thickness at each step of the pulse
-GLOW = "#17405E" #Soft outer circle when the ring is "ready"
+# Animation timings (in milliseconds)
+TYPE_DELAY_MS = 35        # Pause between typed letters
+DRUM_ROLL_STEPS = 6       # How many times the drum roll changes
+DRUM_ROLL_DELAY_MS = 300  # Pause between drum roll steps
+PULSE_DELAY_MS = 120      # Pause between steps of the ring pulse
+THINKING_STEPS = 10       # How many pulse steps before the joke appears
 
-#Ring styles: mode -> (ring thickness, ring colour, glow colour)
+# The mic ring (drawn on the stage canvas)
+RING_X = STAGE_WIDTH // 2     # Centre of the ring
+RING_Y = 112
+RING_RADIUS = 80
+RING_WIDTHS = [8, 11, 14, 11]   # Ring thickness at each step of the pulse
+GLOW_CIRCLES = [(104, "#0E1F3A"), (98, "#10294A"), (92, "#133559")]   # (radius, colour)
+ARC_RADII = [96, 112, 128]      # The sound waves on each side of the ring
+
+# Ring styles: mode -> (ring colour, glow visible?, colours of the three sound waves)
 RING_STYLES = {
-    "idle": (6, "#24405C", BG), #Dim, glow hidden (same colour as background)
-    "ready": (8, ACCENT_HOVER, GLOW), #Bright and glowing
+    "idle": ("#1F3A5A", False, ["#16304A", "#122740", "#0F2036"]),
+    "ready": (BRIGHT, True, ["#2AA8E6", "#1C6E9E", "#134666"]),
 }
+
+# The joke bubble: left, top, right, bottom
+BUBBLE = (70, 276, 710, 416)
+BUBBLE_TEXT_WIDTH = 576   # Long jokes wrap at this width
 
 def loadFavourites():
     try:

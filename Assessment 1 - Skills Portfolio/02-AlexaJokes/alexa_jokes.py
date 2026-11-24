@@ -923,6 +923,101 @@ class JokeAssistant:
     def setStatus(self, text, colour=MUTED):
         self.stage.itemconfig(self.status_text, text=text, fill=colour)
 
+    def createHeader(self, parent):
+
+        header = tk.Frame(parent)
+        header.pack(fill="x", padx=36, pady=(22, 0))
+
+        logo = tk.Canvas(header, width=34, height=34, bg=BG, highlightthickness=0)
+        logo.create_oval(4, 4, 30, 30, outline=ACCENT, width=5)
+        logo.pack(side="left")
+
+        tk.Label(header, text="alexa", font=(FONT, 22)).pack(side="left", padx=(10, 14))
+
+        divider = tk.Frame(header, width=1, height=26, bg="#34405E")
+        divider.pack(side="left")
+
+        tk.Label(
+            header, text="Tell Me a Joke", font=(FONT, 14, "italic"), fg=MUTED
+        ).pack(side="left", padx=14)
+
+        RoundedButton(
+            header,
+            "Quit",
+            self.quitApp,
+            width=90,
+            height=38,
+            fill=CARD,
+            hover=CARD_HOVER,
+            text_colour=TEXT,
+        ).pack(side="right")
+
+    def createDock(self, stage):
+
+        # background=WAVE_2 is the colour of the wave behind the bar
+        dock = Card(
+            stage, width=740, height=84, radius=42, fill=DOCK, background=WAVE_2
+        )
+        stage.create_window(STAGE_WIDTH // 2, STAGE_HEIGHT - 68, window=dock)
+        body = dock.body
+
+        # Dark pill buttons share the same options, so keep them in one dictionary
+        quiet = dict(
+            height=52,
+            fill=CARD,
+            hover=CARD_HOVER,
+            text_colour=TEXT,
+            background=DOCK,
+        )
+
+        self.save_button = RoundedButton(
+            body, "\u2665  Save", self.addFavourite, width=110, **quiet
+        )
+        self.save_button.pack(side="left", padx=3)
+
+        self.joke_button = RoundedButton(
+            body,
+            "Alexa tell me a Joke",
+            self.tellJoke,
+            width=262,
+            height=52,
+            background=DOCK,
+            play_icon=True,
+        )
+        self.joke_button.pack(side="left", padx=3)
+
+        self.next_button = RoundedButton(
+            body, "Next Joke", self.tellJoke, width=120, **quiet
+        )
+        self.next_button.pack(side="left", padx=3)
+
+        # Search: type a word and press Enter
+        box, self.search_entry = makeEntry(
+            body, None, width=190, size=12, height=52, background=DOCK, fill=CARD
+        )
+        box.pack(side="left", padx=3)
+        self.search_entry.bind("<Return>", self.onSearchEnter)
+
+        # Grey hint text that sits on top of the empty search box
+        hint = tk.Label(
+            self.search_entry,
+            text="Search jokes...",
+            font=(FONT, 12),
+            fg=MUTED,
+            bg=CARD,
+        )
+        hint.bind("<Button-1>", lambda event: self.search_entry.focus_set())
+
+        def updateHint(event=None):
+
+            if self.search_entry.get():
+                hint.place_forget()
+            else:
+                hint.place(x=2, y=0, relheight=1)
+
+        self.search_entry.bind("<KeyRelease>", updateHint)
+        updateHint()
+
     def pickJoke(self, previous_joke=None):
         if not self.joke_queue:
             self.joke_queue = self.jokes.copy()
@@ -1190,12 +1285,11 @@ def main():
     JokeAssistant(root)
     preview = tk.Toplevel(root)
     preview.configure(bg=BG)
+    app.createHeader(preview)
     app.createStage(preview)
-    app.stage.itemconfig(app.ring, outline=BRIGHT)
-    app.setDots(3)
-    app.setStatus("Thinking...")
-    app.stage.itemconfig("bubble", state="normal")
-    app.stage.itemconfig(app.setup_text, text="Why did the chicken cross the road?")    
+    app.createDock(app.stage)
+    app.save_button.setEnabled(False)
+    app.next_button.setEnabled(False)
     RoundedButton(root, "Test", lambda: print("clicked")).pack(pady=10)
     RoundedButton(
         root, "Alexa tell me a Joke", lambda: None, width=262, height=52, play_icon=True

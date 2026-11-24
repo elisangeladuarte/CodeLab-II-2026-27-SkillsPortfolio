@@ -691,6 +691,238 @@ class JokeAssistant:
             self.search_button.config(state="disabled")
             self.setup_label.config(text="No jokes available.", fg=ERROR)
 
+    # New stage (ring, joke bubble, drum)
+
+    def createStage(self, parent):
+        """Build the main drawing area: waves, ring, joke bubble and drum."""
+        stage = tk.Canvas(
+            parent,
+            width=STAGE_WIDTH,
+            height=STAGE_HEIGHT,
+            bg=BG,
+            highlightthickness=0,
+        )
+        stage.pack()
+        self.stage = stage
+
+        # Two soft waves behind everything
+        stage.create_polygon(self.wavePoints(150, 26, 0.0), fill=WAVE_1, outline="")
+        stage.create_polygon(self.wavePoints(250, 20, 2.0), fill=WAVE_2, outline="")
+
+        self.drawRing()
+
+        # Text under the ring and the four dots that fill in while "thinking"
+        self.status_text = stage.create_text(
+            RING_X, 232, text="", fill=MUTED, font=(FONT, 14, "italic")
+        )
+        self.dot_items = []
+        for number in range(4):
+            x = RING_X - 33 + number * 22
+            self.dot_items.append(
+                stage.create_oval(x - 5, 251, x + 5, 261, fill="#1E3350", outline="")
+            )
+
+        self.drawBubble()
+        self.drawDrum()
+
+        # The Show Punchline button sits where the drum roll will appear
+        self.punch_button = RoundedButton(
+            stage,
+            "Show Punchline",
+            self.showPunchline,
+            width=170,
+            height=42,
+            fill=CARD,
+            hover=CARD_HOVER,
+            text_colour=TEXT,
+            background=WAVE_2,
+        )
+        self.punch_window = stage.create_window(
+            RING_X, 452, window=self.punch_button, state="hidden"
+        )
+
+        self.counter_text = stage.create_text(
+            24,
+            484,
+            anchor="w",
+            text="Jokes told: 0",
+            fill=MUTED,
+            font=(FONT, 10),
+        )
+
+    def wavePoints(self, base, height, shift):
+
+        points = []
+        for x in range(0, STAGE_WIDTH + 1, 10):
+            points += [x, base + height * math.sin(x / 130 + shift)]
+
+        # Close the shape along the bottom edge of the canvas
+        points += [STAGE_WIDTH, STAGE_HEIGHT, 0, STAGE_HEIGHT]
+        return points
+
+    def drawRing(self):
+
+        stage = self.stage
+        x, y = RING_X, RING_Y
+
+        # Soft glow: three circles that get brighter towards the middle
+        self.glow_items = []
+        for radius, colour in GLOW_CIRCLES:
+            self.glow_items.append(
+                stage.create_oval(
+                    x - radius,
+                    y - radius,
+                    x + radius,
+                    y + radius,
+                    fill=colour,
+                    outline="",
+                )
+            )
+
+        # Sound waves: a short arc on the left and one on the right, three times
+        self.arc_items = []
+        for radius in ARC_RADII:
+            box = (x - radius, y - radius, x + radius, y + radius)
+            left = stage.create_arc(*box, start=150, extent=60, style="arc", width=5)
+            right = stage.create_arc(*box, start=-30, extent=60, style="arc", width=5)
+            self.arc_items.append((left, right))
+
+        # The ring itself: a dark disc with a thick outline
+        self.ring = stage.create_oval(
+            x - RING_RADIUS,
+            y - RING_RADIUS,
+            x + RING_RADIUS,
+            y + RING_RADIUS,
+            fill="#09101F",
+            width=10,
+        )
+
+        # The microphone: a pill, a cradle, a stem and a base
+        mic = "#EAF2FF"
+        roundedRectangle(stage, x - 12, y - 32, x + 12, y + 10, 12, mic, "mic")
+        stage.create_arc(
+            x - 22,
+            y - 22,
+            x + 22,
+            y + 22,
+            start=180,
+            extent=180,
+            style="arc",
+            outline=mic,
+            width=4,
+        )
+        stage.create_line(x, y + 22, x, y + 34, fill=mic, width=4)
+        stage.create_line(
+            x - 12, y + 34, x + 12, y + 34, fill=mic, width=4, capstyle="round"
+        )
+
+    def drawBubble(self):
+
+        stage = self.stage
+        left, top, right, bottom = BUBBLE
+
+        # A bubble with an outline: a bigger blue shape with a darker one on top
+        roundedRectangle(stage, left, top, right, bottom, 30, BUBBLE_EDGE, "bubble")
+        roundedRectangle(
+            stage, left + 2, top + 2, right - 2, bottom - 2, 28, BUBBLE_FILL, "bubble"
+        )
+
+        # Three small spark lines at the top left corner
+        sparks = [(-34, 28, -20, 34), (-28, 14, -18, 24), (-14, 10, -12, 20)]
+        for x1, y1, x2, y2 in sparks:
+            stage.create_line(
+                left + x1,
+                top + y1,
+                left + x2,
+                top + y2,
+                fill=ACCENT,
+                width=3,
+                capstyle="round",
+                tags="bubble",
+            )
+
+        # The setup, and the punchline which is moved below it when it appears
+        self.setup_text = stage.create_text(
+            left + 32,
+            top + 20,
+            anchor="nw",
+            text="",
+            fill=TEXT,
+            font=(MONO, 17),
+            width=BUBBLE_TEXT_WIDTH,
+            tags="bubble",
+        )
+        self.punchline_text = stage.create_text(
+            left + 32,
+            top + 70,
+            anchor="nw",
+            text="",
+            fill=ACCENT,
+            font=(MONO, 17),
+            width=BUBBLE_TEXT_WIDTH,
+            tags="bubble",
+        )
+        stage.itemconfig("bubble", state="hidden")
+
+    def drawDrum(self):
+
+        stage = self.stage
+        x, y = RING_X, 446
+
+        # Bottom edge, body and the top skin, drawn from back to front
+        stage.create_oval(
+            x - 26, y + 4, x + 26, y + 24, fill="#2E3FB0", outline="", tags="drum"
+        )
+        stage.create_rectangle(
+            x - 26, y - 8, x + 26, y + 14, fill="#3B4FD8", outline="", tags="drum"
+        )
+        stage.create_oval(
+            x - 26,
+            y - 18,
+            x + 26,
+            y + 2,
+            fill=TEXT,
+            outline="#2E3FB0",
+            width=2,
+            tags="drum",
+        )
+
+        # Two drumsticks. moveSticks() swaps their positions to look like hitting
+        self.stick_left = stage.create_line(
+            0, 0, 0, 0, fill=STAR, width=4, capstyle="round", tags="drum"
+        )
+        self.stick_right = stage.create_line(
+            0, 0, 0, 0, fill=STAR, width=4, capstyle="round", tags="drum"
+        )
+        self.moveSticks(True)
+
+        self.drum_text = stage.create_text(
+            x,
+            484,
+            text="* Drum roll *",
+            fill=MUTED,
+            font=(FONT, 12, "italic"),
+            tags="drum",
+        )
+        stage.itemconfig("drum", state="hidden")
+
+    def moveSticks(self, left_up):
+        x, y = RING_X, 446
+        high_left = (x - 34, y - 46, x - 10, y - 20)
+        low_left = (x - 34, y - 34, x - 10, y - 16)
+        high_right = (x + 34, y - 46, x + 10, y - 20)
+        low_right = (x + 34, y - 34, x + 10, y - 16)
+
+        self.stage.coords(self.stick_left, *(high_left if left_up else low_left))
+        self.stage.coords(self.stick_right, *(low_right if left_up else high_right))
+
+    def setDots(self, count):
+        for number, dot in enumerate(self.dot_items):
+            self.stage.itemconfig(dot, fill=ACCENT if number < count else "#1E3350")
+
+    def setStatus(self, text, colour=MUTED):
+        self.stage.itemconfig(self.status_text, text=text, fill=colour)
+
     def pickJoke(self, previous_joke=None):
         if not self.joke_queue:
             self.joke_queue = self.jokes.copy()
@@ -772,8 +1004,8 @@ class JokeAssistant:
 
     def setRing(self, mode):
         width, colour, glow = RING_STYLES[mode]
-        print("Colour:", colour)
-        print("Width:", width)
+        print("Colour:", repr(colour))
+        print("Width:", repr(width))
         self.ring_canvas.itemconfig(
             self.ring,
             outline=colour,
@@ -956,6 +1188,14 @@ class JokeAssistant:
 def main():
     root = tk.Tk()
     JokeAssistant(root)
+    preview = tk.Toplevel(root)
+    preview.configure(bg=BG)
+    app.createStage(preview)
+    app.stage.itemconfig(app.ring, outline=BRIGHT)
+    app.setDots(3)
+    app.setStatus("Thinking...")
+    app.stage.itemconfig("bubble", state="normal")
+    app.stage.itemconfig(app.setup_text, text="Why did the chicken cross the road?")    
     RoundedButton(root, "Test", lambda: print("clicked")).pack(pady=10)
     RoundedButton(
         root, "Alexa tell me a Joke", lambda: None, width=262, height=52, play_icon=True

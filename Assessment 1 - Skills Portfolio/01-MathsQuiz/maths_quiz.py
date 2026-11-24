@@ -33,6 +33,9 @@ TIME_LIMITS = {1: 15, 2: 25, 3: 45}
 # The timer turns red when this many seconds (or fewer) are left
 WARNING_SECONDS = 5
 
+# Width and height (in pixels) of the circular timer
+RING_SIZE = 170
+
 # Leaderboard
 LEADERBOARD_FILE = Path(__file__).parent / "leaderboard.json"
 MAX_SCORES = 5  # How many scores are kept for each difficulty
@@ -58,6 +61,7 @@ CARD_HOVER = "#262266"  # A button or row when the mouse is over it
 BORDER = "#322E70"  # Thin outlines
 ACCENT = "#7C5CFF"  # Main buttons
 ACCENT_HOVER = "#9077FF"
+ACCENT_SOFT = "#B3A6FF"  # Soft purple for small labels
 TEXT = "#F2F0FF"
 MUTED = "#9A96BF"
 SUCCESS = "#3DDC97"  # Correct
@@ -254,12 +258,14 @@ class Card(tk.Canvas):
         )
 
 
-def makeEntry(parent, variable, width, background=CARD, size=13, justify="left"):
+def makeEntry(
+    parent, variable, width, background=CARD, size=13, justify="left", height=46
+):
 
     box = Card(
         parent,
         width=width,
-        height=46,
+        height=height,
         radius=18,
         fill=BG,
         outline=BORDER,
@@ -448,79 +454,114 @@ class MathsQuiz:
     def displayProblem(self):
         self.clearWindow()
 
+        page = tk.Frame(self.root)
+        page.pack(expand=True)
+
+        # Left column: streak, timer ring and score
+        left = tk.Frame(page)
+        left.grid(row=0, column=0, padx=(0, 24))
+
+        self.streak_label, self.best_label = self.makeTile(left, "STREAK", (0, 14))
+
+        self.timer_canvas = tk.Canvas(
+            left,
+            width=RING_SIZE,
+            height=RING_SIZE,
+            bg=BG,
+            highlightthickness=0,
+        )
+        self.timer_canvas.pack(pady=(0, 14))
+
+        self.score_label, score_note = self.makeTile(left, "SCORE", 0)
+        score_note.config(text=f"out of {TOTAL_QUESTIONS * 10}")
+
+        # Right column: question number and the question card
+        right = tk.Frame(page)
+        right.grid(row=0, column=1)
+
+        pill = Card(right, width=210, height=38, radius=17)
+        pill.pack(pady=(0, 14))
         tk.Label(
-            self.root,
+            pill.body,
             text=f"Question {self.question_number} of {TOTAL_QUESTIONS}",
-            font=("Arial", 12),
-        ).pack(pady=(20, 0))
+            font=(FONT, 11),
+            fg=ACCENT_SOFT,
+            bg=CARD,
+        ).pack(expand=True)
 
-        stats_frame = tk.Frame(self.root)
-        stats_frame.pack()
+        card = Card(right, width=470, height=360)
+        card.pack()
+        body = card.body
 
-        self.score_label = tk.Label(
-            stats_frame, text=f"Score: {self.score}", font=("Arial", 12)
-        )
-        self.score_label.pack(side="left", padx=10)
-
-        self.streak_label = tk.Label(
-            stats_frame,
-            text=f"Streak: {self.streak}",
-            font=("Arial", 12),
-            fg=MUTED,
-        )
-        self.streak_label.pack(side="left", padx=10)
-
-        self.timer_label = tk.Label(self.root, text="", font=("Arial, 12"))
-        self.timer_label.pack(pady=(5, 0))
+        self.attempt_label = tk.Label(body, text="", font=(FONT, 10, "bold"), bg=CARD)
+        self.attempt_label.pack(pady=(26, 0))
 
         tk.Label(
-            self.root,
+            body,
             text=f"{self.num1} {self.operation} {self.num2} =",
-            font=("Arial", 28, "bold"),
-        ).pack(pady=20)
-
-        self.answer_entry = tk.Entry(
-            self.root,
-            font=("Arial", 18),
-            width=10,
-            justify="center",
+            font=(FONT, 44, "bold"),
             bg=CARD,
-            fg=TEXT,
-            insertbackground=TEXT,
-            relief="flat",
-            disabledbackground=CARD,
-            disabledforeground=MUTED,
+        ).pack(pady=(14, 18))
+
+        box, self.answer_entry = makeEntry(
+            body, None, width=240, size=22, justify="center", height=58
         )
-        self.answer_entry.pack()
+        box.pack()
         self.answer_entry.focus_set()
         self.answer_entry.bind("<Return>", lambda event: self.checkAnswer())
 
-        self.submit_button = ttk.Button(
-            self.root, text="Submit", width=12, command=self.checkAnswer
+        self.feedback_label = tk.Label(body, text="", font=(FONT, 12), bg=CARD)
+        self.feedback_label.pack(pady=(14, 8))
+
+        self.submit_button = RoundedButton(
+            body,
+            "Submit",
+            self.checkAnswer,
+            width=180,
+            height=46,
+            background=CARD,
         )
-        self.submit_button.pack(pady=15)
+        self.submit_button.pack()
 
-        self.feedback_label = tk.Label(self.root, text="")
-        self.feedback_label.pack()
-
+        self.updateAttemptLabel()
+        self.updateStats()
         self.startTimer()
 
-    def updateStats(self):
-        self.score_label.config(text=f"Score: {self.score}")
+    def makeTile(self, parent, caption, pady):
+        tile = Card(parent, width=RING_SIZE, height=108, radius=26)
+        tile.pack(pady=pady)
+        tk.Label(
+            tile.body, text=caption, font=(FONT, 9, "bold"), fg=MUTED, bg=CARD
+        ).pack(pady=(8, 0))
+        number = tk.Label(tile.body, text="0", font=(FONT, 24, "bold"), bg=CARD)
+        number.pack()
+        note = tk.Label(tile.body, text="", font=(FONT, 9), fg=MUTED, bg=CARD)
+        note.pack()
+        return number, note
 
-        colour = SUCCESS if self.streak >= STREAK_HIGHLIGHT else MUTED
-        self.streak_label.config(text=f"Streak: {self.streak}", fg=colour)
+    def updateAttemptLabel(self):
+        if self.attempt == 1:
+            self.attempt_label.config(text="FIRST ATTEMPT", fg=ACCENT_SOFT)
+        else:
+            self.attempt_label.config(text="LAST CHANCE", fg=WARN)
+
+    def updateStats(self):
+        self.score_label.config(text=str(self.score))
+
+        colour = SUCCESS if self.streak >= STREAK_HIGHLIGHT else TEXT
+        self.streak_label.config(text=str(self.streak), fg=colour)
+        self.best_label.config(text=f"best {self.best_streak}")
 
     # Timer
     def startTimer(self):
         self.cancelTimer()
         self.time_left = TIME_LIMITS[self.difficulty]
-        self.updateTimerLabel()
+        self.drawTimer()
         self.timer_job = self.root.after(1000, self.tick)
 
     def tick(self):
         self.time_left -= 1
-        self.updateTimerLabel()
+        self.drawTimer()
 
         if self.time_left <= 0:
             self.timeUp()
@@ -532,9 +573,45 @@ class MathsQuiz:
             self.root.after_cancel(self.timer_job)
             self.timer_job = None
 
-    def updateTimerLabel(self):
-        colour = ERROR if self.time_left <= WARNING_SECONDS else MUTED
-        self.timer_label.config(text=f"Time left: {self.time_left}s", fg=colour)
+    def drawTimer(self):
+        canvas = self.timer_canvas
+        canvas.delete("all")
+
+        edge = 16
+        size = RING_SIZE
+        fraction = max(self.time_left, 0) / TIME_LIMITS[self.difficulty]
+        colour = ERROR if self.time_left <= WARNING_SECONDS else ACCENT
+
+        # The grey track (a full circle)
+        canvas.create_oval(
+            edge, edge, size - edge, size - edge, outline=BORDER, width=9
+        )
+
+        # The coloured arc starts at the top and shrinks as time runs out.
+        # (359.9 instead of 360 because a full 360 degree arc doesn't draw.)
+        if fraction > 0:
+            canvas.create_arc(
+                edge,
+                edge,
+                size - edge,
+                size - edge,
+                style="arc",
+                start=90,
+                extent=-359.9 * fraction,
+                outline=colour,
+                width=9,
+            )
+
+        canvas.create_text(
+            size // 2,
+            size // 2 - 8,
+            text=str(max(self.time_left, 0)),
+            fill=TEXT,
+            font=(FONT, 28, "bold"),
+        )
+        canvas.create_text(
+            size // 2, size // 2 + 22, text="seconds", fill=MUTED, font=(FONT, 9)
+        )
 
     def timeUp(self):
         self.timer_job = None
@@ -600,6 +677,7 @@ class MathsQuiz:
             self.updateStats()
             self.answer_entry.delete(0, tk.END)
             self.answer_entry.focus_set()
+            self.updateAttemptLabel()
             self.startTimer()
         else:
             self.recordQuestion(0)
@@ -617,7 +695,7 @@ class MathsQuiz:
 
     def finishQuestion(self):
         self.answer_entry.config(state="disabled")
-        self.submit_button.config(state="disabled")
+        self.submit_button.setEnabled(False)
         self.root.after(FEEDBACK_DELAY_MS, self.nextQuestion)
 
     def nextQuestion(self):

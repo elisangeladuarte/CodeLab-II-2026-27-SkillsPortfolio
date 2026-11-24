@@ -5,40 +5,40 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-#Constants
+# Constants
 WINDOW_TITLE = "Alexa Tell Me a Joke"
-#Width in pixels at which long jokes wrap onto a new line
+# Width in pixels at which long jokes wrap onto a new line
 WRAP_LENGTH = 600
 JOKES_FILE = Path(__file__).parent / "randomJokes.txt"
 # Favourite jokes are saved here so they are still there next time
 FAVOURITES_FILE = Path(__file__).parent / "myFavourites.json"
 
-#Colors 
-BG = "#0B1220" #Window background
-CARD = "#141C2F" #Greyed-out button background
-ACCENT = "#2BB6F6" #Buttons and punchline
+# Colors
+BG = "#0B1220"  # Window background
+CARD = "#141C2F"  # Greyed-out button background
+ACCENT = "#2BB6F6"  # Buttons and punchline
 ACCENT_HOVER = "#5CC8F8"
 TEXT = "#E8EEF9"
 MUTED = "#8A96B0"
 ERROR = "#FF6B7A"
 SUCCESS = "#3DDC97"
 
-#Animation timings (in milliseconds)
-TYPE_DELAY_MS = 35 #Pause between typed letters
-DRUM_ROLL_STEPS = 5 #How many times the drum roll dots change
-DRUM_ROLL_DELAY_MS = 300 #Pause between drum roll steps
-PULSE_DELAY_MS = 100 #Pause between steps of the ring pulse
-THINKING_STEPS = 9 #How many pulse steps before the joke appears
+# Animation timings (in milliseconds)
+TYPE_DELAY_MS = 35  # Pause between typed letters
+DRUM_ROLL_STEPS = 5  # How many times the drum roll dots change
+DRUM_ROLL_DELAY_MS = 300  # Pause between drum roll steps
+PULSE_DELAY_MS = 100  # Pause between steps of the ring pulse
+THINKING_STEPS = 9  # How many pulse steps before the joke appears
 
-#The Echo ring 
+# The Echo ring
 RING_SIZE = 110
-RING_WIDTHS = [4, 6, 8, 10, 8, 6] #Ring thickness at each step of the pulse
-GLOW = "#17405E" #Soft outer circle when the ring is "ready"
+RING_WIDTHS = [4, 6, 8, 10, 8, 6]  # Ring thickness at each step of the pulse
+GLOW = "#17405E"  # Soft outer circle when the ring is "ready"
 
-#Ring styles: mode -> (ring thickness, ring colour, glow colour)
+# Ring styles: mode -> (ring thickness, ring colour, glow colour)
 RING_STYLES = {
-    "idle": (6, "#24405C", BG), #Dim, glow hidden (same colour as background)
-    "ready": (8, ACCENT_HOVER, GLOW), #Bright and glowing
+    "idle": (6, "#24405C", BG),  # Dim, glow hidden (same colour as background)
+    "ready": (8, ACCENT_HOVER, GLOW),  # Bright and glowing
 }
 
 # Constants
@@ -99,6 +99,7 @@ BUBBLE = (70, 276, 710, 416)
 BUBBLE_TEXT_WIDTH = 576  # Long jokes wrap at this width
 
 # Drawing helpers
+
 
 def roundedRectangle(canvas, x1, y1, x2, y2, radius, fill, tag):
 
@@ -454,6 +455,7 @@ class JokeAssistant:
         self.fav_window = None  # The favourites window, when it is open
         self.fav_list = None
         self.fav_detail = None
+        self.after_message = ("", MUTED)  # A message to show once the joke stats
 
         self.createWidgets()
 
@@ -772,7 +774,11 @@ class JokeAssistant:
         width, colour, glow = RING_STYLES[mode]
         print("Colour:", colour)
         print("Width:", width)
-        self.ring_canvas.itemconfig(self.ring, outline=colour, width=width, )
+        self.ring_canvas.itemconfig(
+            self.ring,
+            outline=colour,
+            width=width,
+        )
         self.ring_canvas.itemconfig(self.ring_glow, outline=glow)
 
     def pulseRing(self, step, when_done):

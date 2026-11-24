@@ -33,8 +33,11 @@ TIME_LIMITS = {1: 15, 2: 25, 3: 45}
 # The timer turns red when this many seconds (or fewer) are left
 WARNING_SECONDS = 5
 
-# Width and height (in pixels) of the circular timer
-RING_SIZE = 170
+# Width and height (in pixels) of the small circular timer
+RING_SIZE = 64
+
+# Width (in pixels) of the stat tiles on the results screen
+TILE_WIDTH = 170
 
 # Leaderboard
 LEADERBOARD_FILE = Path(__file__).parent / "leaderboard.json"
@@ -110,36 +113,28 @@ def addScore(board, level, name, score, best_streak):
 
 
 # Drawing helpers
+def roundedRectangle(canvas, x1, y1, x2, y2, radius, fill, tag):
+    # The radius can't be bigger than half of the width or the height
+    radius = min(radius, (x2 - x1) // 2, (y2 - y1) // 2)
+    diameter = radius * 2
 
-
-def roundedRectangle(canvas, x1, y1, x2, y2, radius, **options):
-    points = [
-        x1 + radius,
-        y1,
-        x2 - radius,
-        y1,
-        x2,
-        y1,
-        x2,
-        y1 + radius,
-        x2,
-        y2 - radius,
-        x2,
-        y2,
-        x2 - radius,
-        y2,
-        x1 + radius,
-        y2,
-        x1,
-        y2,
-        x1,
-        y2 - radius,
-        x1,
-        y1 + radius,
-        x1,
-        y1,
+    corners = [
+        (x1, y1),
+        (x2 - diameter, y1),
+        (x1, y2 - diameter),
+        (x2 - diameter, y2 - diameter),
     ]
-    return canvas.create_polygon(points, smooth=True, **options)
+    for x, y in corners:
+        canvas.create_oval(
+            x, y, x + diameter, y + diameter, fill=fill, outline="", tags=tag
+        )
+
+    canvas.create_rectangle(
+        x1 + radius, y1, x2 - radius, y2, fill=fill, outline="", tags=tag
+    )
+    canvas.create_rectangle(
+        x1, y1 + radius, x2, y2 - radius, fill=fill, outline="", tags=tag
+    )
 
 
 class RoundedButton(tk.Canvas):
@@ -152,15 +147,12 @@ class RoundedButton(tk.Canvas):
         width=200,
         height=46,
         hint="",
-        radius=18,
+        radius=23,
         fill=ACCENT,
         hover=ACCENT_HOVER,
-        outline=ACCENT,
-        hover_outline=ACCENT_HOVER,
         text_colour="white",
         background=BG,
     ):
-
         super().__init__(
             parent,
             width=width,
@@ -170,91 +162,94 @@ class RoundedButton(tk.Canvas):
             cursor="hand2",
         )
         self.command = command
-        self.colours = (fill, hover, outline, hover_outline)
+        self.fill = fill
+        self.hover = hover
         self.text_colour = text_colour
         self.enabled = True
 
-        self.shape = roundedRectangle(
-            self, 1, 1, width - 1, height - 1, radius, fill=fill, outline=outline
-        )
-        if hint:  # the text on the left and a small grey hint on the right
+        roundedRectangle(self, 0, 0, width, height, radius, fill, "shape")
+
+        if hint:
+            # The name sits on the left and the small hint on the right
             self.label = self.create_text(
-                18,
-                height / 2,
+                22,
+                height // 2,
                 text=text,
                 anchor="w",
                 fill=text_colour,
-                font=(FONT, 13, "bold"),
+                font=(FONT, 12, "bold"),
             )
-            self.create_text(
-                width - 18,
-                height / 2,
+            self.hint = self.create_text(
+                width - 22,
+                height // 2,
                 text=hint,
                 anchor="e",
                 fill=MUTED,
-                font=(FONT, 11),
+                font=(FONT, 10),
             )
         else:
             self.label = self.create_text(
-                width / 2,
-                height / 2,
+                width // 2,
+                height // 2,
                 text=text,
                 fill=text_colour,
                 font=(FONT, 12, "bold"),
             )
+            self.hint = None
 
         self.bind("<Enter>", lambda event: self.setHover(True))
         self.bind("<Leave>", lambda event: self.setHover(False))
         self.bind("<Button-1>", self.click)
 
-    def setHover(self, hovering):
+    def setHover(self, inside):
+
         if not self.enabled:
             return
-        fill, hover, outline, hover_outline = self.colours
-        self.itemconfig(
-            self.shape,
-            fill=hover if hovering else fill,
-            outline=hover_outline if hovering else outline,
-        )
+        self.itemconfig("shape", fill=self.hover if inside else self.fill)
+        if self.hint:
+            self.itemconfig(self.hint, fill=TEXT if inside else MUTED)
 
     def click(self, event):
+
         if self.enabled:
             self.command()
 
     def setEnabled(self, enabled):
+
         self.enabled = enabled
-        fill, _, outline, _ = self.colours
-        self.itemconfig(
-            self.shape,
-            fill=fill if enabled else CARD,
-            outline=outline if enabled else BORDER,
-        )
-        self.itemconfig(self.label, fill=self.text_colour if enabled else MUTED)
-        self.config(cursor="hand2" if enabled else "arrow")
+        if enabled:
+            self.itemconfig("shape", fill=self.fill)
+            self.itemconfig(self.label, fill=self.text_colour)
+            self.config(cursor="hand2")
+        else:
+            self.itemconfig("shape", fill=BORDER)
+            self.itemconfig(self.label, fill=MUTED)
+            self.config(cursor="arrow")
 
 
 class Card(tk.Canvas):
+    """A rounded panel. Put other widgets inside it using its .body frame."""
 
-    def __init__(
-        self, parent, width, height, radius=28, fill=CARD, outline=BORDER, background=BG
-    ):
-
+    def __init__(self, parent, width, height, radius=36, fill=CARD, background=BG):
         super().__init__(
-            parent, width=width, height=height, bg=background, highlightthickness=0
+            parent,
+            width=width,
+            height=height,
+            bg=background,
+            highlightthickness=0,
         )
-        roundedRectangle(
-            self, 1, 1, width - 1, height - 1, radius, fill=fill, outline=outline
-        )
+        roundedRectangle(self, 0, 0, width, height, radius, fill, "shape")
 
-        # An ordinary frame sits on top, slightly inside the rounded edge
+        # The body is a plain square frame, so it must sit far enough from
+        # the edge to stay clear of the rounded corners (bigger radius = bigger gap)
+        gap = radius // 3 + 2
         self.body = tk.Frame(self, bg=fill)
-        inset = 8
         self.create_window(
-            width / 2,
-            height / 2,
+            width // 2,
+            height // 2,
             window=self.body,
-            width=width - 2 * inset,
-            height=height - 2 * inset,
+            width=width - 2 * gap,
+            height=height - 2 * gap,
         )
 
 
@@ -263,26 +258,22 @@ def makeEntry(
 ):
 
     box = Card(
-        parent,
-        width=width,
-        height=height,
-        radius=18,
-        fill=BG,
-        outline=BORDER,
-        background=background,
+        parent, width=width, height=height, radius=22, fill=BG, background=background
     )
     entry = tk.Entry(
         box.body,
         textvariable=variable,
         font=(FONT, size),
+        justify=justify,
         bg=BG,
         fg=TEXT,
         insertbackground=TEXT,
         relief="flat",
         highlightthickness=0,
-        justify=justify,
+        disabledbackground=BG,
+        disabledforeground=MUTED,
     )
-    entry.pack(fill="both", expand=True, padx=10)
+    entry.pack(fill="both", expand=True, padx=12)
     return box, entry
 
 
@@ -377,7 +368,7 @@ class MathsQuiz:
         ).pack(pady=(4, 22))
 
         # Everything else sits inside one rounded card
-        card = Card(page, width=440, height=316)
+        card = Card(page, width=460, height=330)
         card.pack()
         body = card.body
 
@@ -401,9 +392,9 @@ class MathsQuiz:
                 height=44,
                 hint=DIFFICULTY_HINTS[level],
                 fill=BG,
-                hover=CARD_HOVER,
-                outline=BORDER,
-                hover_outline=ACCENT,
+                hover=ACCENT,
+                # outline=BORDER,
+                # hover_outline=ACCENT,
                 text_colour=TEXT,
                 background=CARD,
             ).pack(padx=20, pady=3)
@@ -415,9 +406,9 @@ class MathsQuiz:
             width=200,
             height=40,
             fill=BG,
-            hover=CARD,
-            outline=BG,
-            hover_outline=BORDER,
+            hover=CARD_HOVER,
+            # outline=BG,
+            # hover_outline=BORDER,
             text_colour=MUTED,
         ).pack(pady=(18, 0))
 
@@ -452,56 +443,46 @@ class MathsQuiz:
 
     # Question screen
     def displayProblem(self):
+
         self.clearWindow()
 
         page = tk.Frame(self.root)
         page.pack(expand=True)
 
-        # Left column: streak, timer ring and score
-        left = tk.Frame(page)
-        left.grid(row=0, column=0, padx=(0, 24))
-
-        self.streak_label, self.best_label = self.makeTile(left, "STREAK", (0, 14))
-
-        self.timer_canvas = tk.Canvas(
-            left,
-            width=RING_SIZE,
-            height=RING_SIZE,
-            bg=BG,
-            highlightthickness=0,
-        )
-        self.timer_canvas.pack(pady=(0, 14))
-
-        self.score_label, score_note = self.makeTile(left, "SCORE", 0)
-        score_note.config(text=f"out of {TOTAL_QUESTIONS * 10}")
-
-        # Right column: question number and the question card
-        right = tk.Frame(page)
-        right.grid(row=0, column=1)
-
-        pill = Card(right, width=210, height=38, radius=17)
-        pill.pack(pady=(0, 14))
-        tk.Label(
-            pill.body,
-            text=f"Question {self.question_number} of {TOTAL_QUESTIONS}",
-            font=(FONT, 11),
-            fg=ACCENT_SOFT,
-            bg=CARD,
-        ).pack(expand=True)
-
-        card = Card(right, width=470, height=360)
+        card = Card(page, width=520, height=440)
         card.pack()
         body = card.body
 
+        # Top row: question number on the left, small timer ring on the right
+        header = tk.Frame(body, bg=CARD)
+        header.pack(fill="x", padx=28, pady=(20, 0))
+
+        tk.Label(
+            header,
+            text=f"Question {self.question_number} of {TOTAL_QUESTIONS}",
+            font=(FONT, 11),
+            fg=MUTED,
+            bg=CARD,
+        ).pack(side="left")
+
+        self.timer_canvas = tk.Canvas(
+            header,
+            width=RING_SIZE,
+            height=RING_SIZE,
+            bg=CARD,
+            highlightthickness=0,
+        )
+        self.timer_canvas.pack(side="right")
+
         self.attempt_label = tk.Label(body, text="", font=(FONT, 10, "bold"), bg=CARD)
-        self.attempt_label.pack(pady=(26, 0))
+        self.attempt_label.pack()
 
         tk.Label(
             body,
             text=f"{self.num1} {self.operation} {self.num2} =",
-            font=(FONT, 44, "bold"),
+            font=(FONT, 52, "bold"),
             bg=CARD,
-        ).pack(pady=(14, 18))
+        ).pack(pady=(6, 20))
 
         box, self.answer_entry = makeEntry(
             body, None, width=240, size=22, justify="center", height=58
@@ -511,7 +492,7 @@ class MathsQuiz:
         self.answer_entry.bind("<Return>", lambda event: self.checkAnswer())
 
         self.feedback_label = tk.Label(body, text="", font=(FONT, 12), bg=CARD)
-        self.feedback_label.pack(pady=(14, 8))
+        self.feedback_label.pack(pady=(14, 10))
 
         self.submit_button = RoundedButton(
             body,
@@ -523,12 +504,34 @@ class MathsQuiz:
         )
         self.submit_button.pack()
 
+        # Small stat chips under the card
+        chips = tk.Frame(page)
+        chips.pack(pady=(16, 0))
+        self.streak_label = self.makeChip(chips, "Streak", 120)
+        self.score_label = self.makeChip(chips, "Score", 120)
+        self.best_label = self.makeChip(chips, "Best streak", 150)
+
         self.updateAttemptLabel()
         self.updateStats()
         self.startTimer()
 
+    def makeChip(self, parent, caption, width):
+
+        chip = Card(parent, width=width, height=40, radius=20)
+        chip.pack(side="left", padx=6)
+
+        inner = tk.Frame(chip.body, bg=CARD)
+        inner.pack(expand=True)
+        tk.Label(inner, text=caption, font=(FONT, 10), fg=MUTED, bg=CARD).pack(
+            side="left", padx=(0, 6)
+        )
+        value = tk.Label(inner, text="0", font=(FONT, 11, "bold"), bg=CARD)
+        value.pack(side="left")
+        return value
+
     def makeTile(self, parent, caption, pady=0, side="top", padx=0):
-        tile = Card(parent, width=RING_SIZE, height=108, radius=26)
+
+        tile = Card(parent, width=TILE_WIDTH, height=108, radius=26)
         tile.pack(pady=pady, side=side, padx=padx)
         tk.Label(
             tile.body, text=caption, font=(FONT, 9, "bold"), fg=MUTED, bg=CARD
@@ -540,17 +543,19 @@ class MathsQuiz:
         return number, note
 
     def updateAttemptLabel(self):
+
         if self.attempt == 1:
             self.attempt_label.config(text="FIRST ATTEMPT", fg=ACCENT_SOFT)
         else:
             self.attempt_label.config(text="LAST CHANCE", fg=WARN)
 
     def updateStats(self):
+
         self.score_label.config(text=str(self.score))
 
         colour = SUCCESS if self.streak >= STREAK_HIGHLIGHT else TEXT
         self.streak_label.config(text=str(self.streak), fg=colour)
-        self.best_label.config(text=f"best {self.best_streak}")
+        self.best_label.config(text=str(self.best_streak))
 
     # Timer
     def startTimer(self):
@@ -574,44 +579,29 @@ class MathsQuiz:
             self.timer_job = None
 
     def drawTimer(self):
+
         canvas = self.timer_canvas
         canvas.delete("all")
 
-        edge = 16
+        edge = 5
         size = RING_SIZE
         fraction = max(self.time_left, 0) / TIME_LIMITS[self.difficulty]
         colour = ERROR if self.time_left <= WARNING_SECONDS else ACCENT
 
         # The grey track (a full circle)
-        canvas.create_oval(
-            edge, edge, size - edge, size - edge, outline=BORDER, width=9
-        )
+        canvas.create_oval(edge, edge, size - edge, size - edge,
+                           outline=BORDER, width=5)
 
         # The coloured arc starts at the top and shrinks as time runs out.
         # (359.9 instead of 360 because a full 360 degree arc doesn't draw.)
         if fraction > 0:
             canvas.create_arc(
-                edge,
-                edge,
-                size - edge,
-                size - edge,
-                style="arc",
-                start=90,
-                extent=-359.9 * fraction,
-                outline=colour,
-                width=9,
+                edge, edge, size - edge, size - edge, style="arc", start=90,
+                extent=-359.9 * fraction, outline=colour, width=5,
             )
 
-        canvas.create_text(
-            size // 2,
-            size // 2 - 8,
-            text=str(max(self.time_left, 0)),
-            fill=TEXT,
-            font=(FONT, 28, "bold"),
-        )
-        canvas.create_text(
-            size // 2, size // 2 + 22, text="seconds", fill=MUTED, font=(FONT, 9)
-        )
+        canvas.create_text(size // 2, size // 2, text=str(max(self.time_left, 0)),
+                           fill=TEXT, font=(FONT, 14, "bold"))
 
     def timeUp(self):
         self.timer_job = None
@@ -782,10 +772,10 @@ class MathsQuiz:
         # Dark buttons use the same options, so keep them in one dictionary
         quiet = dict(
             width=150,
-            fill=BG,
+            fill=CARD,
             hover=CARD_HOVER,
-            outline=BORDER,
-            hover_outline=ACCENT,
+            #outline=BORDER,
+            #hover_outline=ACCENT,
             text_colour=TEXT,
         )
         RoundedButton(
@@ -887,10 +877,10 @@ class MathsQuiz:
                 lambda tab_level=tab_level: self.displayLeaderboard(tab_level, back),
                 width=120,
                 height=38,
-                fill=ACCENT if chosen else BG,
-                outline=ACCENT if chosen else BORDER,
+                fill=ACCENT if chosen else CARD,
+                #outline=ACCENT if chosen else BORDER,
                 hover=ACCENT_HOVER if chosen else CARD_HOVER,
-                hover_outline=ACCENT,
+                #hover_outline=ACCENT,
                 text_colour="white" if chosen else MUTED,
             ).pack(side="left", padx=4)
 
@@ -918,13 +908,14 @@ class MathsQuiz:
             for position, entry in enumerate(entries, start=1):
                 # The row that was just added gets a purple highlight
                 latest = entry is self.last_entry
+                row_colour = ACCENT if latest else CARD
                 row = Card(
                     page,
                     width=540,
                     height=40,
-                    radius=18,
-                    fill=CARD_HOVER if latest else CARD,
-                    outline=ACCENT if latest else BORDER,
+                    radius=20,
+                    fill=row_colour,
+                    #outline=ACCENT if latest else BORDER,
                 )
                 row.pack(pady=3)
 

@@ -452,9 +452,6 @@ class JokeAssistant:
         self.jokes_told = 0  # Counter shown to the user
         self.anim_job = None  # The pending root.after call, so we cancel it
         self.favourites = loadFavourites()  # Saved (setup, punchline) tuples
-        self.fav_window = None  # The favourites window, when it is open
-        self.fav_list = None
-        self.fav_detail = None
         self.after_message = ("", MUTED)  # A message to show once the joke stats
 
         self.createWidgets()
@@ -541,160 +538,76 @@ class JokeAssistant:
         return jokes
 
     def createWidgets(self):
-        tk.Label(self.root, text="Joke Assistant", font=("Arial", 22, "bold")).pack(
-            pady=(25, 15)
-        )
 
-        self.joke_button = ttk.Button(
-            self.root,
-            text="Alexa tell me a Joke",
-            width=22,
-            command=self.tellJoke,
-        )
-        self.joke_button.pack(pady=5)
+        self.createHeader(self.root)
 
-        # Search row: type a word, then press Enter or click Go
-        search_frame = tk.Frame(self.root)
-        search_frame.pack(pady=(10, 0))
+        body = tk.Frame(self.root)
+        body.pack(fill="both", expand=True, padx=25, pady=(8, 0))
 
-        tk.Label(search_frame, text="Joke about:", font=("Arial", 11)).pack(
-            side="left", padx=(0, 8)
-        )
-        self.search_entry = tk.Entry(
-            search_frame,
-            font=("Arial", 12),
-            width=20,
-            bg=CARD,
-            fg=TEXT,
-            insertbackground=TEXT,
-            relief="flat",
-            highlightthickness=1,
-            highlightbackground=CARD,
-            highlightcolor=ACCENT,
-            disabledbackground=CARD,
-        )
-        self.search_entry.pack(side="left", ipady=4)
-        self.search_entry.bind("<Return>", self.onSearchEnter)
+        main = tk.Frame(body)  # ring, joke and buttons
+        main.pack(side="left", anchor="n")
+        side = tk.Frame(body)  # favourites
+        side.pack(side="right", anchor="n", pady=(30, 0))
 
-        self.search_button = ttk.Button(
-            search_frame, text="Go", width=6, command=self.searchJoke
-        )
-        self.search_button.pack(side="left", padx=(8, 0))
+        self.createStage(main)
+        self.createDock(self.stage)
+        self.createFavouritesPanel(side)
 
-        tk.Label(self.root, text="Joke Assistant", font=("Arial", 22, "bold")).pack(
-            pady=(20, 5)
-        )
-
-        # The Echo ring: a glow circle behind a thicker ring, with a small label
-        self.ring_canvas = tk.Canvas(
-            self.root,
-            width=RING_SIZE,
-            height=RING_SIZE,
-            bg=BG,
-            highlightthickness=0,
-        )
-        self.ring_canvas.pack(pady=(0, 10))
-        self.ring_glow = self.ring_canvas.create_oval(
-            5, 5, RING_SIZE - 5, RING_SIZE - 5, outline=BG, width=2
-        )
-        self.ring = self.ring_canvas.create_oval(
-            20, 20, RING_SIZE - 20, RING_SIZE - 20, outline=BG, width=6
-        )
-        self.ring_canvas.create_text(
-            RING_SIZE / 2,
-            RING_SIZE / 2,
-            text="alexa",
-            fill=MUTED,
-            font=("Arial", 11),
-        )
+        # Start with a dim ring and nothing to save or repeat yet
         self.setRing("idle")
+        self.setDots(0)
+        self.setStatus("Ask me for a joke")
+        self.save_button.setEnabled(False)
+        self.next_button.setEnabled(False)
 
-        # Setup label: wraplength makes long jokes wrap instead of running off screen
-        self.setup_label = tk.Label(
-            self.root,
-            text="",
-            font=("Arial", 14),
-            wraplength=WRAP_LENGTH,
-            height=2,
-        )
-        self.setup_label.pack(pady=(25, 10))
-
-        self.punchline_button = ttk.Button(
-            self.root,
-            text="Show Punchline",
-            width=22,
-            state="disabled",
-            command=self.showPunchline,
-        )
-        self.punchline_button.pack(pady=5)
-
-        # Punchline label
-        self.punchline_label = tk.Label(
-            self.root,
-            text="",
-            font=("Arial", 14, "italic"),
-            fg=ACCENT,
-            wraplength=WRAP_LENGTH,
-            height=2,
-        )
-        self.punchline_label.pack(pady=10)
-
-        # Next Joke and Quit sit side by side inside a frame
-        button_frame = tk.Frame(self.root)
-        button_frame.pack(pady=(20, 10))
-
-        self.next_button = ttk.Button(
-            button_frame,
-            text="Next Joke",
-            width=12,
-            state="disabled",
-            command=self.tellJoke,
-        )
-        self.next_button.pack(side="left", padx=8)
-
-        self.save_button = ttk.Button(
-            button_frame,
-            text="Save Joke",
-            width=12,
-            state="disabled",
-            command=self.addFavourite,
-        )
-        self.save_button.pack(side="left", padx=8)
-
-        ttk.Button(
-            button_frame,
-            text="Favourites",
-            width=12,
-            command=self.openFavourites,
-        ).pack(side="left", padx=8)
-
-        ttk.Button(
-            button_frame,
-            text="Quit",
-            width=12,
-            command=self.quitApp,
-        ).pack(side="left", padx=8)
-
-        self.counter_label = tk.Label(
-            self.root, text="Jokes told: 0", font=("Arial", 10), fg=MUTED
-        )
-        self.counter_label.pack(pady=(5, 0))
-
-        # Short messages such as "Saved to your favourites."
-        self.status_label = tk.Label(self.root, text="", font=("Arial", 10))
-        self.status_label.pack(pady=(2, 0))
-
-        # Without any jokes the button can't do anything, so switch it off
+        # Without any jokes the buttons can't do anything, so switch them off
         if not self.jokes:
-            self.joke_button.config(state="disabled")
+            self.joke_button.setEnabled(False)
             self.search_entry.config(state="disabled")
-            self.search_button.config(state="disabled")
-            self.setup_label.config(text="No jokes available.", fg=ERROR)
+            self.setStatus("No jokes available.", ERROR)
+
+    def createFavouritesPanel(self, parent):
+
+        card = Card(parent, width=270, height=430, radius=26, fill=PANEL)
+        card.pack()
+        body = card.body
+
+        title = tk.Frame(body, bg=PANEL)
+        title.pack(fill="x", padx=8, pady=(6, 0))
+        tk.Label(title, text="\u2605", font=(FONT, 16), fg=STAR, bg=PANEL).pack(
+            side="left"
+        )
+        tk.Label(title, text="Your Favourites", font=(FONT, 14, "bold"), bg=PANEL).pack(
+            side="left", padx=8
+        )
+
+        # A canvas holds the rows so the list can scroll with the mouse wheel
+        self.fav_canvas = tk.Canvas(
+            body, width=236, height=290, bg=PANEL, highlightthickness=0
+        )
+        self.fav_canvas.pack(pady=(10, 0))
+        self.fav_rows = tk.Frame(self.fav_canvas, bg=PANEL)
+        self.fav_canvas.create_window(0, 0, window=self.fav_rows, anchor="nw")
+        self.bindScroll(self.fav_canvas)
+
+        RoundedButton(
+            body,
+            "Clear All",
+            self.clearFavourites,
+            width=190,
+            height=40,
+            fill=CARD,
+            hover=CARD_HOVER,
+            text_colour=TEXT,
+            background=PANEL,
+        ).pack(pady=(10, 0))
+
+        self.refreshFavourites()
 
     # New stage (ring, joke bubble, drum)
 
     def createStage(self, parent):
-        """Build the main drawing area: waves, ring, joke bubble and drum."""
+
         stage = tk.Canvas(
             parent,
             width=STAGE_WIDTH,
@@ -1098,15 +1011,16 @@ class JokeAssistant:
             self.typeText(self.punchline_label, punchline)
 
     def setRing(self, mode):
-        width, colour, glow = RING_STYLES[mode]
-        print("Colour:", repr(colour))
-        print("Width:", repr(width))
-        self.ring_canvas.itemconfig(
-            self.ring,
-            outline=colour,
-            width=width,
-        )
-        self.ring_canvas.itemconfig(self.ring_glow, outline=glow)
+ 
+        colour, glow, wave_colours = RING_STYLES[mode]
+        self.stage.itemconfig(self.ring, outline=colour, width=10)
+
+        for item in self.glow_items:
+            self.stage.itemconfig(item, state="normal" if glow else "hidden")
+
+        for (left, right), wave_colour in zip(self.arc_items, wave_colours):
+            self.stage.itemconfig(left, outline=wave_colour)
+            self.stage.itemconfig(right, outline=wave_colour)
 
     def pulseRing(self, step, when_done):
         if step < THINKING_STEPS:
@@ -1149,17 +1063,18 @@ class JokeAssistant:
 
     # Favourites
     def addFavourite(self):
+
         if self.current_joke is None:
             return
 
         if self.current_joke in self.favourites:
-            self.status_label.config(text="Already in your favourites.", fg=MUTED)
+            self.setStatus("Already in your favourites.")
             return
 
         self.favourites.append(self.current_joke)
         self.storeFavourites()
-        self.status_label.config(text="Saved to your favourites.", fg=SUCCESS)
-        self.refreshFavourites()  # Update the favourites window if it is open
+        self.setStatus("Saved to your favourites.", SUCCESS)
+        self.refreshFavourites()
 
     def storeFavourites(self):
         if not saveFavourites(self.favourites):
@@ -1167,105 +1082,95 @@ class JokeAssistant:
                 "Save failed", "Your favourites could not be saved to the file."
             )
 
-    def openFavourites(self):
-        if self.fav_window is not None and self.fav_window.winfo_exists():
-            self.fav_window.lift()
-            return
-
-        window = tk.Toplevel(self.root)
-        window.title("Favourite jokes")
-        window.geometry("560x430")
-        window.configure(bg=BG)
-        window.transient(self.root)
-        window.bind("<Escape>", lambda event: window.destroy())
-        self.fav_window = window
-
-        tk.Label(window, text="Your Favourites", font=("Arial", 18, "bold")).pack(
-            pady=(15, 10)
-        )
-
-        # The list of setups, with a scrollbar
-        list_frame = tk.Frame(window)
-        list_frame.pack(fill="both", expand=True, padx=20)
-
-        self.fav_list = tk.Listbox(
-            list_frame,
-            font=("Arial", 12),
-            bg=CARD,
-            fg=TEXT,
-            selectbackground=ACCENT,
-            selectforeground=BG,
-            highlightthickness=0,
-            relief="flat",
-            activestyle="none",
-        )
-        scrollbar = ttk.Scrollbar(list_frame, command=self.fav_list.yview)
-        self.fav_list.config(yscrollcommand=scrollbar.set)
-        self.fav_list.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        self.fav_list.bind("<<ListboxSelect>>", self.showFavouritePunchline)
-
-        # Shows the punchline of the selected joke
-        self.fav_detail = tk.Label(
-            window,
-            text="",
-            font=("Arial", 12, "italic"),
-            fg=ACCENT,
-            wraplength=500,
-            height=2,
-        )
-        self.fav_detail.pack(pady=10)
-
-        buttons = tk.Frame(window)
-        buttons.pack(pady=(0, 15))
-        ttk.Button(
-            buttons, text="Delete selected", width=14, command=self.deleteFavourite
-        ).pack(side="left", padx=6)
-        ttk.Button(
-            buttons, text="Clear all", width=10, command=self.clearFavourites
-        ).pack(side="left", padx=6)
-        ttk.Button(buttons, text="Close", width=10, command=window.destroy).pack(
-            side="left", padx=6
-        )
-
         self.refreshFavourites()
 
     def refreshFavourites(self):
-        if self.fav_window is None or not self.fav_window.winfo_exists():
-            return
 
-        self.fav_list.delete(0, tk.END)
-        for setup, _ in self.favourites:
-            self.fav_list.insert(tk.END, setup)
+        for widget in self.fav_rows.winfo_children():
+            widget.destroy()
 
-        if self.favourites:
-            self.fav_detail.config(text="Select a joke to see its punchline.", fg=MUTED)
-        else:
-            self.fav_detail.config(text="No favourites yet.", fg=MUTED)
+        if not self.favourites:
+            tk.Label(
+                self.fav_rows,
+                text="No favourites yet.\nPress Save on a joke you like.",
+                font=(FONT, 11),
+                fg=MUTED,
+                bg=PANEL,
+                justify="left",
+                wraplength=220,
+            ).pack(pady=20, padx=8, anchor="w")
 
-    def showFavouritePunchline(self, event=None):
-        selection = self.fav_list.curselection()  # A tuple of selected positions
-        if selection:
-            _, punchline = self.favourites[selection[0]]
-            self.fav_detail.config(text=punchline, fg=ACCENT)
+        for position, (setup, _) in enumerate(self.favourites):
+            self.makeFavouriteRow(position, setup)
 
-    def deleteFavourite(self):
-        selection = self.fav_list.curselection()
-        if not selection:
-            self.fav_detail.config(text="Select a joke to delete first.", fg=MUTED)
-            return
+        # Tell the canvas how tall the rows are, so scrolling stops at the end
+        self.fav_rows.update_idletasks()
+        self.fav_canvas.config(scrollregion=self.fav_canvas.bbox("all"))
+        self.fav_canvas.yview_moveto(0)
 
-        del self.favourites[selection[0]]
-        self.storeFavourites()
-        self.refreshFavourites()
+    def makeFavouriteRow(self, position, setup):
+
+        row = Card(
+            self.fav_rows, width=232, height=58, radius=20, fill=CARD, background=PANEL
+        )
+        row.pack(pady=3)
+
+        shortened = setup if len(setup) <= 44 else setup[:41] + "..."
+        text = tk.Label(
+            row.body,
+            text=shortened,
+            font=(FONT, 10),
+            bg=CARD,
+            anchor="w",
+            justify="left",
+            wraplength=165,
+            cursor="hand2",
+        )
+        text.pack(side="left", padx=(4, 0))
+        text.bind("<Button-1>", lambda event: self.tellFavourite(position))
+
+        cross = tk.Label(
+            row.body,
+            text="\u2715",
+            font=(FONT, 11),
+            fg=MUTED,
+            bg=CARD,
+            cursor="hand2",
+        )
+        cross.pack(side="right", padx=(0, 4))
+        cross.bind("<Button-1>", lambda event: self.deleteFavourite(position))
+        cross.bind("<Enter>", lambda event: cross.config(fg=ERROR))
+        cross.bind("<Leave>", lambda event: cross.config(fg=MUTED))
+
+        for widget in (row, row.body, text, cross):
+            self.bindScroll(widget)
+
+    def bindScroll(self, widget):
+
+        widget.bind("<MouseWheel>", self.scrollFavourites)
+
+    def scrollFavourites(self, event):
+
+        self.fav_canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+
+    def tellFavourite(self, position):
+
+        if position < len(self.favourites):
+            self.startJoke(self.favourites[position])
+
+    def deleteFavourite(self, position):
+
+        if position < len(self.favourites):
+            del self.favourites[position]
+            self.storeFavourites()
+            self.refreshFavourites()
 
     def clearFavourites(self):
+
         if not self.favourites:
             return
 
-        if messagebox.askyesno(
-            "Clear all", "Delete all of your favourite jokes?", parent=self.fav_window
-        ):
+        if messagebox.askyesno("Clear all", "Delete all of your favourite jokes?"):
             self.favourites = []
             self.storeFavourites()
             self.refreshFavourites()

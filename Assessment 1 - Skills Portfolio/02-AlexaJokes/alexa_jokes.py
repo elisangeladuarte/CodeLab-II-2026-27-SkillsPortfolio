@@ -952,36 +952,46 @@ class JokeAssistant:
         self.startJoke(self.pickJoke())
 
     def startJoke(self, joke):
+
         self.cancelAnimations()  # Stop any typing or drum roll still running
 
         self.current_joke = joke
         self.jokes_told += 1
+        self.after_message = ("", MUTED)
 
-        self.setup_label.config(text="Thinking...", fg=MUTED)
-        self.punchline_label.config(text="")  # Clear the previous punchline
-        self.punchline_button.config(state="disabled")  # Until the setup is typed
-        self.save_button.config(state="disabled")
-        self.status_label.config(text="")
-        self.next_button.config(state="normal")
-        self.counter_label.config(text=f"Jokes told: {self.jokes_told}")
+        # Show an empty bubble and hide the previous punchline, drum and button
+        self.stage.itemconfig("bubble", state="normal")
+        self.stage.itemconfig(self.setup_text, text="")
+        self.stage.itemconfig(self.punchline_text, text="")
+        self.stage.itemconfig("drum", state="hidden")
+        self.stage.itemconfig(self.punch_window, state="hidden")
+        self.stage.itemconfig(self.counter_text, text=f"Jokes told: {self.jokes_told}")
+
+        self.save_button.setEnabled(False)  # Until the setup is typed
+        self.next_button.setEnabled(True)
 
         # The ring pulses while Alexa "thinks", then the setup is typed out
+        self.setStatus("Thinking...")
         self.pulseRing(0, self.showSetup)
 
     def showSetup(self):
+
         setup, _ = self.current_joke
-        self.setup_label.config(fg=TEXT)
-        self.typeText(self.setup_label, setup, when_done=self.enablePunchline)
+        self.setStatus(*self.after_message)
+        self.typeText(self.setup_text, setup, when_done=self.enablePunchline)
 
     def enablePunchline(self):
-        self.punchline_button.config(state="normal")
-        self.save_button.config(state="normal")
+
+        self.stage.itemconfig(self.punch_window, state="normal")
+        self.save_button.setEnabled(True)
 
     def showPunchline(self):
+
         if self.current_joke is None:
             return  # No joke on screen, so nothing to reveal
 
-        self.punchline_button.config(state="disabled")  # Already revealing
+        self.stage.itemconfig(self.punch_window, state="hidden")  # Already revealing
+        self.stage.itemconfig("drum", state="normal")
         self.drumRoll(0)
 
     def typeText(self, label, text, index=0, when_done=None):
@@ -1011,7 +1021,7 @@ class JokeAssistant:
             self.typeText(self.punchline_label, punchline)
 
     def setRing(self, mode):
- 
+
         colour, glow, wave_colours = RING_STYLES[mode]
         self.stage.itemconfig(self.ring, outline=colour, width=10)
 
@@ -1024,7 +1034,7 @@ class JokeAssistant:
 
     def pulseRing(self, step, when_done):
         if step < THINKING_STEPS:
-            width = RING_WIDTHS[step % len(RING_WIDTHS)]  # cycles through the list
+            width = RING_WIDTHS[step % len(RING_WIDTHS)]  # Cycles through the list
             self.ring_canvas.itemconfig(self.ring, width=width, outline=ACCENT)
             self.ring_canvas.itemconfig(self.ring_glow, outline=BG)
             self.anim_job = self.root.after(
@@ -1041,25 +1051,24 @@ class JokeAssistant:
         return "break"  # Stops Enter from also telling a random joke
 
     def searchJoke(self):
+
         word = self.search_entry.get().strip()
         if not word:
-            self.status_label.config(text="Type a word to search for.", fg=MUTED)
+            self.setStatus("Type a word to search for.")
             return
 
         matches = findJokes(self.jokes, word)
         if not matches:
-            self.status_label.config(text=f'No jokes about "{word}".', fg=ERROR)
+            self.setStatus(f'No jokes about "{word}".', ERROR)
             return
 
         # Avoid telling the joke that is already on screen, if there is a choice
         choices = [joke for joke in matches if joke != self.current_joke] or matches
         self.startJoke(random.choice(choices))
 
-        # startJoke clears the status label, so show the count afterwards
+        # startJoke clears the message, so set it again for when the setup appears
         noun = "joke" if len(matches) == 1 else "jokes"
-        self.status_label.config(
-            text=f'Found {len(matches)} {noun} about "{word}".', fg=MUTED
-        )
+        self.after_message = (f'Found {len(matches)} {noun} about "{word}".', MUTED)
 
     # Favourites
     def addFavourite(self):

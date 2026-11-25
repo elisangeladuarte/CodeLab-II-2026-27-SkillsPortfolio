@@ -491,6 +491,7 @@ class StudentManager:
 
         # Default colours for plain Tkinter widgets created from now on
         defaults = {
+            "*Font": f"{{{FONT}}} 11",
             "*Label.background": BG,
             "*Label.foreground": TEXT,
             "*Frame.background": BG,
@@ -512,7 +513,7 @@ class StudentManager:
             "*TCombobox*Listbox.background": CARD,
             "*TCombobox*Listbox.foreground": TEXT,
             "*TCombobox*Listbox.selectBackground": ACCENT,
-            "*TCombobox*Listbox.selectForeground": BG,
+            "*TCombobox*Listbox.selectForeground": WHITE,
         }
         for pattern, value in defaults.items():
             self.root.option_add(pattern, value)
@@ -546,7 +547,7 @@ class StudentManager:
         style.map(
             "Menu.TButton",
             background=[("active", ACCENT)],
-            foreground=[("active", BG)],
+            foreground=[("active", WHITE)],
         )
 
         style.configure(
@@ -583,13 +584,13 @@ class StudentManager:
         style.map(
             "Treeview",
             background=[("selected", ACCENT)],
-            foreground=[("selected", BG)],
+            foreground=[("selected", WHITE)],
         )
         style.configure(
             "Treeview.Heading",
             background=BORDER,
             foreground=TEXT,
-            font=("Arial", 11, "bold"),
+            font=(FONT, 11, "bold"),
             padding=6,
             borderwidth=0,
         )

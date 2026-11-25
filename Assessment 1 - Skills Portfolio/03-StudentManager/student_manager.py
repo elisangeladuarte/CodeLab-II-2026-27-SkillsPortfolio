@@ -24,13 +24,14 @@ MAX_UNDO = 10
 GRADE_BOUNDARIES = [(70, "A"), (60, "B"), (50, "C"), (40, "D"), (0, "F")]
 # Table columns: (heading, width in pixels, text alignment)
 TABLE_COLUMNS = [
-    ("Name", 200, "w"),
-    ("Number", 80, "center"),
-    ("Coursework (/60)", 140, "center"),
-    ("Exam (/100)", 100, "center"),
-    ("Percentage", 100, "center"),
-    ("Grade", 70, "center"),
+    ("Name", 250, "w"),
+    ("Number", 110, "center"),
+    ("Coursework /60", 160, "center"),
+    ("Exam /100", 130, "center"),
+    ("Percentage", 230, "center"),
+    ("Grade", 132, "center"),
 ]
+TABLE_WIDTH = sum(width for _, width, _ in TABLE_COLUMNS)
 # Colours (kept in one place so the whole look can be changed easily)
 BG = "#F3F5F9"  # Window background (a very pale grey-blue)
 CARD = "#FFFFFF"  # White cards, table and entry boxes
@@ -74,6 +75,11 @@ STAT_WIDTH = 230
 STAT_HEIGHT = 128
 CHART_CARD_WIDTH = 294
 CHART_SIZE = (276, 110)  # The chart canvas, a little smaller than its card
+TABLE_CARD_SIZE = (1032, 440)  # The white card that holds the table
+HEADER_HEIGHT = 40  # The row of column headings
+TABLE_ROWS_HEIGHT = 380  # Room for the rows (440 - 20 margins - 40 heading)
+ROW_HEIGHT = 38  # One student row
+PROGRESS_WIDTH = 90  # The length of the percentage bar
 
 # Sort choices: label shown to the user -> function that gives the sort key
 SORT_KEYS = {
@@ -87,8 +93,8 @@ SORT_KEYS = {
 COLUMN_SORT = {
     "Name": ("Name", False),
     "Number": ("Student number", False),
-    "Coursework (/60)": ("Coursework total", True),
-    "Exam (/100)": ("Exam mark", True),
+    "Coursework /60": ("Coursework total", True),
+    "Exam /100": ("Exam mark", True),
     "Percentage": ("Overall percentage", True),
     "Grade": (
         "Overall percentage",
@@ -470,7 +476,7 @@ class StudentManager:
         self.root = root
         self.root.title(WINDOW_TITLE)
         self.root.geometry(WINDOW_SIZE)
-        self.root.minsize(1000, 800)
+        self.root.resizable(False, False)
         self.setupStyle()
 
         # Student records
@@ -493,7 +499,7 @@ class StudentManager:
         self.placeholder = tk.Label(
             self.root, text="Student Manager", font=("Arial", 24, "bold")
         )
-        self.placeholder.grid(row=0, column=0, pady=200)
+        self.placeholder.pack(pady=200)
 
     def setupStyle(self):
         self.root.configure(bg=BG)
@@ -755,113 +761,319 @@ class StudentManager:
         messagebox.showwarning("Problems with the data file", message)
 
     def createWidgets(self):
-        # Left column holds the menu, right column holds the results
-        self.root.columnconfigure(1, weight=1)
-        self.root.rowconfigure(0, weight=1)
 
-        # Menu
-        menu_frame = tk.Frame(self.root, padx=15, pady=15)
-        menu_frame.grid(row=0, column=0, sticky="ns")
+        self.createHeader(self.root)
+        self.createSearch(self.header)
+        self.createStats(self.root)
+        self.createMenu(self.root)
+        self.createTableArea(self.root)
 
-        tk.Label(menu_frame, text="MENU", font=("Arial", 14, "bold")).pack(pady=(0, 10))
-
-        menu_options = [
-            ("1. View all student records", self.viewAll),
-            ("2. View individual student record", self.viewIndividual),
-            ("3. Show highest total score", self.showHighest),
-            ("4. Show lowest total score", self.showLowest),
-            ("5. Sort student records", self.showSorted),
-            ("6. Add a student record", self.addStudent),
-            ("7. Delete a student record", self.deleteStudent),
-            ("8. Update a student record", self.updateStudent),
-            ("9. Undo last change", self.undoLast),
-        ]
-        for text, handler in menu_options:
-            ttk.Button(
-                menu_frame,
-                text=text,
-                width=28,
-                style="Menu.TButton",
-                command=lambda handler=handler: self.runOption(handler),
-            ).pack(pady=3)
-
-        # Grade chart under the menu
-        tk.Label(menu_frame, text="GRADES", font=("Arial", 10, "bold"), fg=MUTED).pack(
-            pady=(25, 5)
-        )
-        # The small width lets the menu buttons decide how wide the menu is
-        self.chart_canvas = tk.Canvas(
-            menu_frame, width=100, height=170, bg=CARD, highlightthickness=0
-        )
-        self.chart_canvas.pack(fill="x")
-        self.chart_canvas.bind("<Configure>", self.drawChart)  # redraw when resized
-
-        # Results area
-        display_frame = tk.Frame(self.root, padx=10, pady=15)
-        display_frame.grid(row=0, column=1, sticky="nsew")
-        display_frame.columnconfigure(0, weight=1)
-        display_frame.rowconfigure(1, weight=1)  # The table takes the spare height
-
-        # Search box above the table: it filters the rows as you type
-        search_frame = tk.Frame(display_frame)
-        search_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-
-        tk.Label(search_frame, text="Search name or number:").pack(side="left")
-        self.search_entry = tk.Entry(
-            search_frame, textvariable=self.search_var, font=("Arial", 12), width=28
-        )
-        self.search_entry.pack(side="left", padx=10, ipady=4)
-        self.clear_button = ttk.Button(
-            search_frame,
-            text="Clear",
-            width=8,
-            command=lambda: self.search_var.set(""),
-        )
-        self.clear_button.pack(side="left")
-
-        headings = [heading for heading, _, _ in TABLE_COLUMNS]
-        self.table = ttk.Treeview(
-            display_frame, columns=headings, show="headings", selectmode="browse"
-        )
-        for heading, width, alignment in TABLE_COLUMNS:
-            self.table.heading(
-                heading,
-                text=heading,
-                command=lambda heading=heading: self.sortByColumn(heading),
-            )
-            self.table.column(heading, width=width, anchor=alignment)
-        self.table.grid(row=1, column=0, sticky="nsew")
-
-        # One tag per grade, so each row can be tinted by its grade
-        for grade, colour in GRADE_COLOURS.items():
-            self.table.tag_configure(grade, background=colour)
-
-        scrollbar = ttk.Scrollbar(
-            display_frame, orient="vertical", command=self.table.yview
-        )
-        self.table.configure(yscrollcommand=scrollbar.set)
-        scrollbar.grid(row=1, column=1, sticky="ns")
-
-        # Summary
+        # Summary / status line under the table
         self.summary_label = tk.Label(
-            display_frame,
+            self.root,
             text="Choose an option from the menu.",
-            font=("Arial", 11),
+            font=(FONT, 11),
             anchor="w",
         )
-        self.summary_label.grid(
-            row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0)
-        )
+        self.summary_label.pack(fill="x", padx=36, pady=(10, 0))
+
+        self.updateStats()
 
         # Without any data there is nothing to show
         if not self.students:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
             self.search_entry.config(state="disabled")
-            self.clear_button.config(state="disabled")
 
-    def clearTable(self):
-        self.table.delete(*self.table.get_children())
-        self.shown_students = []
+    def createSearch(self, parent):
+        """Build the search box on the right of the header."""
+        box, self.search_entry = makeEntry(
+            parent, self.search_var, width=340, height=42
+        )
+        box.pack(side="right")
+
+        # Grey hint text on top of the empty box, and a small cross to clear it
+        hint = tk.Label(
+            self.search_entry,
+            text="Search name or number...",
+            font=(FONT, 12),
+            fg=MUTED,
+            bg=CARD,
+        )
+        hint.bind("<Button-1>", lambda event: self.search_entry.focus_set())
+
+        cross = tk.Label(
+            self.search_entry,
+            text="\u2715",
+            font=(FONT, 11),
+            fg=MUTED,
+            bg=CARD,
+            cursor="hand2",
+        )
+        cross.bind("<Button-1>", lambda event: self.search_var.set(""))
+
+        def updateHint(*args):
+
+            if self.search_var.get():
+                hint.place_forget()
+                cross.place(relx=1.0, x=-2, rely=0.5, anchor="e")
+            else:
+                cross.place_forget()
+                hint.place(x=2, y=0, relheight=1)
+
+        self.search_var.trace_add("write", updateHint)  # Runs on every change
+        updateHint()
+
+    def createMenu(self, parent):
+
+        bar = tk.Frame(parent)
+        bar.pack(fill="x", padx=34, pady=(18, 0))
+
+        # (button text, handler). The first five change what the table shows.
+        options = [
+            ("View all", self.viewAll),
+            ("Individual", self.viewIndividual),
+            ("Highest", self.showHighest),
+            ("Lowest", self.showLowest),
+            ("Sort", self.showSorted),
+            ("Add", self.addStudent),
+            ("Delete", self.deleteStudent),
+            ("Update", self.updateStudent),
+            ("Undo", self.undoLast),
+        ]
+        self.view_names = [text for text, _ in options[:5]]
+        self.menu_buttons = {}
+
+        for text, handler in options:
+            quiet = text == "Undo"  # Undo is drawn fainter than the others
+            button = RoundedButton(
+                bar,
+                text,
+                lambda handler=handler, text=text: self.runOption(handler, text),
+                width=len(text) * 8 + 36,
+                fill=BG if quiet else CARD,
+                text_colour=MUTED if quiet else TEXT,
+            )
+            button.pack(side="left", padx=(0, 7))
+            self.menu_buttons[text] = button
+
+    def createTableArea(self, parent):
+
+        card = Card(
+            parent, width=TABLE_CARD_SIZE[0], height=TABLE_CARD_SIZE[1], radius=26
+        )
+        card.pack(padx=34, pady=(16, 0))
+
+        # The heading row is its own small canvas, so it stays put when the rows scroll
+        heads = tk.Canvas(
+            card.body,
+            width=TABLE_WIDTH,
+            height=HEADER_HEIGHT,
+            bg=CARD,
+            highlightthickness=0,
+        )
+        heads.pack()
+        heads.create_line(
+            0, HEADER_HEIGHT - 1, TABLE_WIDTH, HEADER_HEIGHT - 1, fill=BORDER
+        )
+        self.heading_canvas = heads
+        self.heading_items = {}
+
+        left = 0
+        for number, (heading, width, alignment) in enumerate(TABLE_COLUMNS):
+            tag = f"column{number}"
+            # A plain rectangle behind the text makes the whole column clickable
+            heads.create_rectangle(
+                left,
+                0,
+                left + width,
+                HEADER_HEIGHT - 2,
+                fill=CARD,
+                outline="",
+                tags=tag,
+            )
+            x, anchor = self.columnPosition(left, width, alignment)
+            self.heading_items[heading] = heads.create_text(
+                x,
+                HEADER_HEIGHT // 2,
+                text=heading,
+                anchor=anchor,
+                fill=MUTED,
+                font=(FONT, 10, "bold"),
+                tags=tag,
+            )
+            heads.tag_bind(
+                tag,
+                "<Button-1>",
+                lambda event, heading=heading: self.sortByColumn(heading),
+            )
+            heads.tag_bind(tag, "<Enter>", lambda event: heads.config(cursor="hand2"))
+            heads.tag_bind(tag, "<Leave>", lambda event: heads.config(cursor=""))
+            left += width
+
+        # The rows. One mouse wheel step scrolls by one row.
+        self.rows_canvas = tk.Canvas(
+            card.body,
+            width=TABLE_WIDTH,
+            height=TABLE_ROWS_HEIGHT,
+            bg=CARD,
+            highlightthickness=0,
+            yscrollincrement=ROW_HEIGHT,
+        )
+        self.rows_canvas.pack()
+        self.rows_canvas.bind("<MouseWheel>", self.scrollRows)
+        self.rows_canvas.bind("<Motion>", self.highlightRow)
+        self.rows_canvas.bind(
+            "<Leave>",
+            lambda event: self.rows_canvas.itemconfig("hover", state="hidden"),
+        )
+
+    def columnPosition(self, left, width, alignment):
+
+        if alignment == "w":
+            return left + 14, "w"
+        return left + width // 2, "center"
+
+    def drawRows(self, students):
+
+        canvas = self.rows_canvas
+        canvas.delete("all")
+
+        # The pale blue bar that follows the mouse (highlightRow moves it)
+        roundedRectangle(
+            canvas, 6, 0, TABLE_WIDTH - 6, ROW_HEIGHT - 2, 12, ACCENT_SOFT, "hover"
+        )
+        canvas.itemconfig("hover", state="hidden")
+        self.hover_top = 0
+
+        if not students:
+            canvas.create_text(
+                TABLE_WIDTH // 2,
+                60,
+                text="No students to show.",
+                fill=MUTED,
+                font=(FONT, 12),
+            )
+
+        for index, student in enumerate(students):
+            top = index * ROW_HEIGHT
+            middle = top + ROW_HEIGHT // 2
+
+            # The x position of each column's centre, and where its text starts
+            edges = []
+            left = 0
+            for _, width, alignment in TABLE_COLUMNS:
+                edges.append((left, width, alignment))
+                left += width
+            positions = [self.columnPosition(*edge) for edge in edges]
+            name_x, number_x, coursework_x, exam_x, percent_x, grade_x = (
+                position[0] for position in positions
+            )
+
+            canvas.create_text(
+                name_x,
+                middle,
+                text=student.name,
+                anchor="w",
+                fill=TEXT,
+                font=(FONT, 11, "bold"),
+            )
+            canvas.create_text(
+                number_x, middle, text=str(student.code), fill=MUTED, font=(FONT, 11)
+            )
+            canvas.create_text(
+                coursework_x,
+                middle,
+                text=str(student.coursework_total),
+                fill=TEXT,
+                font=(FONT, 11),
+            )
+            canvas.create_text(
+                exam_x, middle, text=str(student.exam), fill=TEXT, font=(FONT, 11)
+            )
+
+            # Percentage: a grey track, a coloured bar on top, and the number
+            grade_colour = GRADE_BAR_COLOURS[student.grade]
+            bar_left = percent_x - (PROGRESS_WIDTH + 10 + 46) // 2
+            roundedRectangle(
+                canvas,
+                bar_left,
+                middle - 3,
+                bar_left + PROGRESS_WIDTH,
+                middle + 3,
+                3,
+                BORDER,
+                "track",
+            )
+            filled = max(6, PROGRESS_WIDTH * student.percentage / 100)
+            roundedRectangle(
+                canvas,
+                bar_left,
+                middle - 3,
+                bar_left + filled,
+                middle + 3,
+                3,
+                grade_colour,
+                "fill",
+            )
+            canvas.create_text(
+                bar_left + PROGRESS_WIDTH + 10,
+                middle,
+                anchor="w",
+                text=f"{student.percentage:.1f}%",
+                fill=TEXT,
+                font=(FONT, 11),
+            )
+
+            # Grade: the letter inside a small pale pill
+            roundedRectangle(
+                canvas,
+                grade_x - 16,
+                middle - 12,
+                grade_x + 16,
+                middle + 12,
+                12,
+                GRADE_COLOURS[student.grade],
+                "chip",
+            )
+            canvas.create_text(
+                grade_x,
+                middle,
+                text=student.grade,
+                fill=grade_colour,
+                font=(FONT, 11, "bold"),
+            )
+
+            canvas.create_line(
+                0, top + ROW_HEIGHT, TABLE_WIDTH, top + ROW_HEIGHT, fill=LINE
+            )
+
+        # Tell the canvas how tall the rows are, so scrolling stops at the end
+        height = max(len(students) * ROW_HEIGHT, TABLE_ROWS_HEIGHT)
+        canvas.config(scrollregion=(0, 0, TABLE_WIDTH, height))
+        canvas.yview_moveto(0)
+
+    def highlightRow(self, event):
+
+        canvas = self.rows_canvas
+        index = int(canvas.canvasy(event.y) // ROW_HEIGHT)
+
+        if 0 <= index < len(self.shown_students):
+            top = index * ROW_HEIGHT + 1
+            canvas.move("hover", 0, top - self.hover_top)
+            self.hover_top = top
+            canvas.itemconfig("hover", state="normal")
+        else:
+            canvas.itemconfig("hover", state="hidden")
+
+    def scrollRows(self, event):
+
+        self.rows_canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+        self.highlightRow(event)  # the row under the mouse has changed
+
+    def setActiveButton(self, name):
+
+        for text, button in self.menu_buttons.items():
+            button.setActive(text == name)
 
     def showStudents(self, students, summary=None, keep_sort=False):
         self.clearTable()
@@ -898,50 +1110,6 @@ class StudentManager:
             return
         self.showStudents(self.students)
 
-    # Chart
-    def drawChart(self, event=None):
-        canvas = self.chart_canvas
-        canvas.delete("all")  # Wipe the old chart before drawing the new one
-        width = canvas.winfo_width()
-        height = canvas.winfo_height()
-
-        counts = countGrades(self.students)
-        biggest = max(counts.values())
-        if biggest == 0 or width < 20:
-            canvas.create_text(width / 2, height / 2, text="No data", fill=MUTED)
-            return
-
-        top = 22  # Room for the number above the tallest bar
-        baseline = height - 24  # The bars stand on this line, with room for letters
-        plot_height = baseline - top
-        slot = width / len(counts)  # The width given to each bar
-        bar_width = slot * 0.6
-
-        for position, (grade, count) in enumerate(counts.items()):
-            left = position * slot + (slot - bar_width) / 2
-            centre = left + bar_width / 2
-            bar_height = plot_height * count / biggest
-
-            if count > 0:
-                canvas.create_rectangle(
-                    left,
-                    baseline - bar_height,
-                    left + bar_width,
-                    baseline,
-                    fill=GRADE_BAR_COLOURS[grade],
-                    width=0,
-                )
-            canvas.create_text(
-                centre,
-                baseline - bar_height - 10,
-                text=str(count),
-                fill=TEXT,
-                font=("Arial", 10, "bold"),
-            )
-            canvas.create_text(
-                centre, height - 11, text=grade, fill=MUTED, font=("Arial", 11, "bold")
-            )
-
     # Search
     def onSearchChange(self, *args):
         if self.ignore_search:
@@ -949,10 +1117,11 @@ class StudentManager:
 
         text = self.search_var.get().strip()
         if not text:
+            self.activeButton("View all")
             self.viewAll()  # An empty box means "show everyone"
             return
 
-        matches = searchStudents(self.students, text)
+        self.setActiveButton(None)  # The table now shows search results
 
         # If a heading sort is active, keep the matches in that order
         keep_sort = self.sort_column is not None
@@ -966,12 +1135,16 @@ class StudentManager:
             summary = f'No students match "{text}".'
         self.showStudents(matches, summary=summary, keep_sort=keep_sort)
 
-    def runOption(self, handler):
+    def runOption(self, handler, name=None):
+
         self.ignore_search = True  # Changing the text must not trigger a search
         self.search_var.set("")
         self.ignore_search = False
+
+        if name in self.view_names:
+            self.setActiveButton(name)  # show which view is on screen
         handler()
-        self.drawChart()  # The option may have added, deleted or changed a student
+        self.updateStats()  # the option may have added, deleted or changed a student
 
     # Dialogs
     def chooseStudent(self, title, prompt):
@@ -1033,11 +1206,7 @@ class StudentManager:
         self.showStudents([student], summary=f"Showing the record for {student.name}.")
 
     def showExtreme(self, highest):
-        """Show the student(s) with the highest or lowest total mark.
 
-        Args:
-            highest (bool): True for the highest total, False for the lowest.
-        """
         if not self.students:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
@@ -1096,7 +1265,7 @@ class StudentManager:
         dialog.resizable(False, False)
 
         def confirm():
-            """OK button: remember the choices and close the pop-up."""
+
             nonlocal result
             result = (key_combo.get(), direction.get() == "descending")
             dialog.destroy()

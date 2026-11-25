@@ -43,6 +43,8 @@ TEXT = "#1B2A41"  # Dark navy text
 MUTED = "#6B7A90"  # Secondary text
 ERROR = "#DC2626"
 SUCCESS = "#16A34A"
+OFF = "#A5B0C0"  # Text on a disabled button
+WHITE = "#FFFFFF"  # Text on blue buttons
 
 # Pale background for each grade (used for the grade chip in the table)
 GRADE_COLOURS = {
@@ -84,6 +86,178 @@ COLUMN_SORT = {
         True,
     ),  # Grades follow the percentage, so A is first
 }
+
+# Drawing helpers
+
+
+def roundedRectangle(canvas, x1, y1, x2, y2, radius, fill, tag):
+
+    # The radius can't be bigger than half of the width or the height
+    radius = min(radius, (x2 - x1) // 2, (y2 - y1) // 2)
+    diameter = radius * 2
+
+    corners = [
+        (x1, y1),
+        (x2 - diameter, y1),
+        (x1, y2 - diameter),
+        (x2 - diameter, y2 - diameter),
+    ]
+    for x, y in corners:
+        canvas.create_oval(
+            x, y, x + diameter, y + diameter, fill=fill, outline="", tags=tag
+        )
+
+    canvas.create_rectangle(
+        x1 + radius, y1, x2 - radius, y2, fill=fill, outline="", tags=tag
+    )
+    canvas.create_rectangle(
+        x1, y1 + radius, x2, y2 - radius, fill=fill, outline="", tags=tag
+    )
+
+
+def drawOutlinedShape(canvas, width, height, radius, fill, edge):
+
+    roundedRectangle(canvas, 0, 0, width, height, radius, edge, "edge")
+    roundedRectangle(canvas, 1, 1, width - 1, height - 1, radius - 1, fill, "shape")
+
+
+class RoundedButton(tk.Canvas):
+
+    def __init__(
+        self,
+        parent,
+        text,
+        command,
+        width=120,
+        height=38,
+        fill=CARD,
+        hover=ACCENT_SOFT,
+        text_colour=TEXT,
+        outline=BORDER,
+        background=BG,
+        bold=False,
+    ):
+        super().__init__(
+            parent,
+            width=width,
+            height=height,
+            bg=background,
+            highlightthickness=0,
+            cursor="hand2",
+        )
+        self.command = command
+        self.fill = fill
+        self.hover = hover
+        self.text_colour = text_colour
+        self.outline = outline  # None means no outline
+        self.background = background
+        self.enabled = True
+        self.active = False
+
+        drawOutlinedShape(self, width, height, height // 2, fill, outline or fill)
+        self.label = self.create_text(
+            width // 2,
+            height // 2,
+            text=text,
+            fill=text_colour,
+            font=(FONT, 11, "bold" if bold else "normal"),
+        )
+
+        self.bind("<Enter>", lambda event: self.refresh(True))
+        self.bind("<Leave>", lambda event: self.refresh(False))
+        self.bind("<Button-1>", self.click)
+
+    def paint(self, fill, edge, text):
+
+        self.itemconfig("shape", fill=fill)
+        self.itemconfig("edge", fill=edge)
+        self.itemconfig(self.label, fill=text)
+
+    def refresh(self, hovering=False):
+
+        if not self.enabled:
+            self.paint(self.background, BORDER, OFF)
+        elif self.active:
+            colour = ACCENT_HOVER if hovering else ACCENT
+            self.paint(colour, colour, WHITE)
+        else:
+            inside = self.hover if hovering else self.fill
+            self.paint(inside, self.outline or inside, self.text_colour)
+
+    def click(self, event):
+
+        if self.enabled:
+            self.command()
+
+    def setEnabled(self, enabled):
+
+        self.enabled = enabled
+        self.config(cursor="hand2" if enabled else "arrow")
+        self.refresh()
+
+    def setActive(self, active):
+
+        self.active = active
+        self.refresh()
+
+
+class Card(tk.Canvas):
+
+    def __init__(
+        self, parent, width, height, radius=22, fill=CARD, background=BG, border=BORDER
+    ):
+        super().__init__(
+            parent,
+            width=width,
+            height=height,
+            bg=background,
+            highlightthickness=0,
+        )
+        drawOutlinedShape(self, width, height, radius, fill, border or fill)
+
+        # The body is a plain square frame, so it must sit far enough from
+        # The edge to stay clear of the rounded corners (bigger radius = bigger gap)
+        gap = radius // 3 + 2
+        self.body = tk.Frame(self, bg=fill)
+        self.create_window(
+            width // 2,
+            height // 2,
+            window=self.body,
+            width=width - 2 * gap,
+            height=height - 2 * gap,
+        )
+
+    def setEdge(self, colour):
+
+        self.itemconfig("edge", fill=colour)
+
+
+def makeEntry(parent, variable, width, height=42, size=12, fill=CARD, background=BG):
+
+    box = Card(
+        parent,
+        width=width,
+        height=height,
+        radius=height // 2,
+        fill=fill,
+        background=background,
+    )
+    entry = tk.Entry(
+        box.body,
+        textvariable=variable,
+        font=(FONT, size),
+        bg=fill,
+        fg=TEXT,
+        insertbackground=TEXT,
+        relief="flat",
+        highlightthickness=0,
+        disabledbackground=fill,
+        disabledforeground=MUTED,
+    )
+    entry.pack(fill="both", expand=True, padx=8)
+    entry.bind("<FocusIn>", lambda event: box.setEdge(ACCENT))
+    entry.bind("<FocusOut>", lambda event: box.setEdge(BORDER))
+    return box, entry
 
 
 class Student:
@@ -1024,7 +1198,7 @@ class StudentManager:
 
 def main():
     root = tk.Tk()
-    StudentManager(root)
+    StudentManager(root)   
     root.mainloop()
 
 

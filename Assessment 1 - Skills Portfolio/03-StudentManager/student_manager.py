@@ -66,6 +66,15 @@ GRADE_BAR_COLOURS = {
 
 # Font
 FONT = "Segoe UI"
+FONT_LIGHT = "Segoe UI Light"
+
+# Sizes of the cards in the top row (they add up to the 1032 pixels between
+# The window's left and right margins: 3 cards + 3 gaps of 16 + the chart card)
+STAT_WIDTH = 230
+STAT_HEIGHT = 128
+CHART_CARD_WIDTH = 294
+CHART_SIZE = (276, 110)  # The chart canvas, a little smaller than its card
+
 # Sort choices: label shown to the user -> function that gives the sort key
 SORT_KEYS = {
     "Name": lambda student: student.name.lower(),
@@ -606,6 +615,137 @@ class StudentManager:
             darkcolor=ACCENT,
         )
         style.map("TScrollbar", background=[("active", ACCENT_HOVER)])
+
+    # Title, stat cards and grade chart
+
+    def createHeader(self, parent):
+
+        self.header = tk.Frame(parent)
+        self.header.pack(fill="x", padx=34, pady=(26, 0))
+
+        tk.Label(self.header, text="Student Manager", font=(FONT_LIGHT, 30)).pack(
+            side="left"
+        )
+
+    def createStats(self, parent):
+
+        row = tk.Frame(parent)
+        row.pack(fill="x", padx=34, pady=(18, 0))
+
+        # Each stat card has a small caption, a big number and a line of detail
+        self.stat_labels = {}
+        for key, caption in (
+            ("average", "AVERAGE"),
+            ("highest", "HIGHEST"),
+            ("lowest", "LOWEST"),
+        ):
+            card = Card(row, width=STAT_WIDTH, height=STAT_HEIGHT)
+            card.pack(side="left", padx=(0, 16))
+
+            tk.Label(
+                card.body,
+                text=caption,
+                font=(FONT, 9, "bold"),
+                fg=MUTED,
+                bg=CARD,
+                anchor="w",
+            ).pack(fill="x", padx=10, pady=(6, 0))
+            value = tk.Label(
+                card.body, text="", font=(FONT_LIGHT, 30), bg=CARD, anchor="w"
+            )
+            value.pack(fill="x", padx=10)
+            detail = tk.Label(
+                card.body, text="", font=(FONT, 10), fg=MUTED, bg=CARD, anchor="w"
+            )
+            detail.pack(fill="x", padx=10)
+            self.stat_labels[key] = (value, detail)
+
+        # The grade chart sits in a card of its own
+        chart_card = Card(row, width=CHART_CARD_WIDTH, height=STAT_HEIGHT)
+        chart_card.pack(side="left")
+        self.grade_chart = tk.Canvas(
+            chart_card.body,
+            width=CHART_SIZE[0],
+            height=CHART_SIZE[1],
+            bg=CARD,
+            highlightthickness=0,
+        )
+        self.grade_chart.pack()
+
+    def updateStats(self):
+
+        self.drawGradeChart()
+
+        if not self.students:
+            for value, detail in self.stat_labels.values():
+                value.config(text="-", fg=TEXT)
+                detail.config(text="no students")
+            return
+
+        count = len(self.students)
+        noun = "student" if count == 1 else "students"
+        value, detail = self.stat_labels["average"]
+        value.config(text=f"{averagePercentage(self.students):.1f}%", fg=TEXT)
+        detail.config(text=f"across {count} {noun}")
+
+        self.setStat("highest", findExtremes(self.students, True), SUCCESS)
+        self.setStat("lowest", findExtremes(self.students, False), ERROR)
+
+    def setStat(self, key, matches, colour):
+
+        value, detail = self.stat_labels[key]
+        name = matches[0].name
+        if len(matches) > 1:
+            name += f" +{len(matches) - 1} more"  # a tie
+        value.config(text=f"{matches[0].percentage:.1f}%", fg=colour)
+        detail.config(text=name)
+
+    def drawGradeChart(self):
+        """Draw one rounded bar for each grade, showing how many students got it."""
+        canvas = self.grade_chart
+        canvas.delete("all")  # Wipe the old chart before drawing the new one
+        width, height = CHART_SIZE
+
+        counts = countGrades(self.students)
+        biggest = max(max(counts.values()), 1)  # Avoids dividing by zero
+
+        top = 20  # Room for the number above the tallest bar
+        baseline = height - 22  # The bars stand on this line, with room for letters
+        plot_height = baseline - top
+        slot = width / len(counts)  # The width given to each bar
+        bar_width = slot * 0.5
+
+        for position, (grade, count) in enumerate(counts.items()):
+            left = position * slot + (slot - bar_width) / 2
+            centre = left + bar_width / 2
+
+            if count > 0:
+                bar_height = max(plot_height * count / biggest, 8)
+                colour = GRADE_BAR_COLOURS[grade]
+            else:
+                bar_height = 3  # A thin pale line, so the grade is still shown
+                colour = GRADE_COLOURS[grade]
+
+            roundedRectangle(
+                canvas,
+                left,
+                baseline - bar_height,
+                left + bar_width,
+                baseline,
+                5,
+                colour,
+                "bar",
+            )
+            canvas.create_text(
+                centre,
+                baseline - bar_height - 9,
+                text=str(count),
+                fill=TEXT,
+                font=(FONT, 10, "bold"),
+            )
+            canvas.create_text(
+                centre, height - 9, text=grade, fill=MUTED, font=(FONT, 10)
+            )
 
     def reportProblems(self, problems):
         shown = problems[:MAX_PROBLEMS_SHOWN]
@@ -1199,7 +1339,7 @@ class StudentManager:
 
 def main():
     root = tk.Tk()
-    StudentManager(root)   
+    StudentManager(root)
     root.mainloop()
 
 

@@ -2,27 +2,27 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-#Constants
+# Constants
 WINDOW_TITLE = "Student Manager"
 WINDOW_SIZE = "1100x660"
-#Build the path from this script's location so it works from any folder
+# Build the path from this script's location so it works from any folder
 DATA_FILE = Path(__file__).parent / "studentMarks.txt"
-#Maximum marks available (3 coursework marks of 20, plus an exam out of 100)
+# Maximum marks available (3 coursework marks of 20, plus an exam out of 100)
 MAX_COURSEWORK_MARK = 20
 MAX_EXAM_MARK = 100
 COURSEWORK_COUNT = 3
-MAX_TOTAL = COURSEWORK_COUNT * MAX_COURSEWORK_MARK + MAX_EXAM_MARK #160
-#Valid range for a student code, and the number of comma-separated fields
+MAX_TOTAL = COURSEWORK_COUNT * MAX_COURSEWORK_MARK + MAX_EXAM_MARK  # 160
+# Valid range for a student code, and the number of comma-separated fields
 MIN_CODE = 1000
 MAX_CODE = 9999
 FIELDS_PER_LINE = COURSEWORK_COUNT + 3
 # Maximum number of file problems listed in the warning popup
 MAX_PROBLEMS_SHOWN = 5
-#How many changes can be undone
+# How many changes can be undone
 MAX_UNDO = 10
-#Grade boundaries: minimum percentage, grade, checked from highest to lowest
+# Grade boundaries: minimum percentage, grade, checked from highest to lowest
 GRADE_BOUNDARIES = [(70, "A"), (60, "B"), (50, "C"), (40, "D"), (0, "F")]
-#Table columns: (heading, width in pixels, text alignment)
+# Table columns: (heading, width in pixels, text alignment)
 TABLE_COLUMNS = [
     ("Name", 200, "w"),
     ("Number", 80, "center"),
@@ -31,33 +31,40 @@ TABLE_COLUMNS = [
     ("Percentage", 100, "center"),
     ("Grade", 70, "center"),
 ]
-#Colours
-BG = "#0F1923" #Window background
-CARD = "#17242F" #Table, entry boxes and menu buttons
-BORDER = "#26384A" #Table headings and borders
-ACCENT = "#2EC4B6"
-ACCENT_HOVER = "#5ED8CC"
-TEXT = "#E8F1F2"
-MUTED = "#8FA3A8"
-ERROR = "#FF6B7A"
-SUCCESS = "#3DDC97"
-#Row background for each grade in the table
+# Colours (kept in one place so the whole look can be changed easily)
+BG = "#F3F5F9"  # Window background (a very pale grey-blue)
+CARD = "#FFFFFF"  # White cards, table and entry boxes
+BORDER = "#E1E6EE"  # Thin outlines and dividers
+LINE = "#EDF0F5"  # The faint line between table rows
+ACCENT = "#2563EB"  # The main blue
+ACCENT_HOVER = "#1D4ED8"
+ACCENT_SOFT = "#EFF4FF"  # Pale blue for a selected row or option
+TEXT = "#1B2A41"  # Dark navy text
+MUTED = "#6B7A90"  # Secondary text
+ERROR = "#DC2626"
+SUCCESS = "#16A34A"
+
+# Pale background for each grade (used for the grade chip in the table)
 GRADE_COLOURS = {
-    "A": "#12372B",
-    "B": "#12333F",
-    "C": "#39351A",
-    "D": "#3A2B1A",
-    "F": "#3B1C25",
+    "A": "#DCFCE7",
+    "B": "#DBEAFE",
+    "C": "#FEF3C7",
+    "D": "#FFEDD5",
+    "F": "#FEE2E2",
 }
-#Bar colour for each grade in the chart (brighter than the row tints)
+
+# Strong colour for each grade (the chip letter, the chart bars and progress bars)
 GRADE_BAR_COLOURS = {
-    "A": "#3DDC97",
-    "B": "#4CC9F0",
-    "C": "#FFD166",
-    "D": "#FFA94D",
-    "F": "#FF6B7A",
+    "A": "#16A34A",
+    "B": "#2563EB",
+    "C": "#D97706",
+    "D": "#EA580C",
+    "F": "#DC2626",
 }
-#Sort choices: label shown to the user -> function that gives the sort key
+
+# Font
+FONT = "Segoe UI"
+# Sort choices: label shown to the user -> function that gives the sort key
 SORT_KEYS = {
     "Name": lambda student: student.name.lower(),
     "Student number": lambda student: student.code,
@@ -65,15 +72,19 @@ SORT_KEYS = {
     "Exam mark": lambda student: student.exam,
     "Overall percentage": lambda student: student.percentage,
 }
-#Table heading -> (sort key name from SORT_KEYS, True if the first click sorts high to low)
+# Table heading -> (sort key name from SORT_KEYS, True if the first click sorts high to low)
 COLUMN_SORT = {
     "Name": ("Name", False),
     "Number": ("Student number", False),
     "Coursework (/60)": ("Coursework total", True),
     "Exam (/100)": ("Exam mark", True),
     "Percentage": ("Overall percentage", True),
-    "Grade": ("Overall percentage", True), #Grades follow the percentage, so A is first
+    "Grade": (
+        "Overall percentage",
+        True,
+    ),  # Grades follow the percentage, so A is first
 }
+
 
 class Student:
 
@@ -101,10 +112,14 @@ class Student:
     def grade(self):
         for minimum, grade in GRADE_BOUNDARIES:
             if self.percentage >= minimum:
-                return grade   
+                return grade
 
     def __str__(self):
-        return (f"{self.code} {self.name}: {self.total}/{MAX_TOTAL} " f"({self.percentage:.1f}%) grade {self.grade}")
+        return (
+            f"{self.code} {self.name}: {self.total}/{MAX_TOTAL} "
+            f"({self.percentage:.1f}%) grade {self.grade}"
+        )
+
 
 def parseStudent(line):
     parts = [part.strip() for part in line.split(",")]
@@ -120,7 +135,7 @@ def parseStudent(line):
     if not name:
         raise ValueError("the student name is empty")
 
-    #The first three marks are coursework, the last one is the exam
+    # The first three marks are coursework, the last one is the exam
     coursework = [int(mark) for mark in mark_texts[:COURSEWORK_COUNT]]
     exam = int(mark_texts[-1])
 
@@ -130,6 +145,7 @@ def parseStudent(line):
         raise ValueError(f"the exam mark must be 0-{MAX_EXAM_MARK}")
 
     return Student(code, name, coursework, exam)
+
 
 def loadStudents(path):
     students = []
@@ -145,13 +161,16 @@ def loadStudents(path):
                 if not line:
                     continue
 
-                #The first non-blank line holds the number of students
+                # The first non-blank line holds the number of students
                 if not header_read:
                     header_read = True
                     try:
                         expected_count = int(line)
                     except ValueError:
-                        problems.append(f"Line {line_number}: the first line should be " "the number of students.")
+                        problems.append(
+                            f"Line {line_number}: the first line should be "
+                            "the number of students."
+                        )
                     continue
 
                 try:
@@ -161,7 +180,9 @@ def loadStudents(path):
                     continue
 
                 if student.code in codes_seen:
-                    problems.append(f"Line {line_number}: duplicate code {student.code}.")
+                    problems.append(
+                        f"Line {line_number}: duplicate code {student.code}."
+                    )
                     continue
 
                 codes_seen.add(student.code)
@@ -171,11 +192,15 @@ def loadStudents(path):
     except (OSError, UnicodeDecodeError) as error:
         problems.append(f"The data file could not be read: {error}")
 
-    #Cross-check the count on the first line against what was loaded
+    # Cross-check the count on the first line against what was loaded
     if expected_count is not None and expected_count != len(students):
-        problems.append(f"The file says {expected_count} students but " f"{len(students)} valid records were loaded.")
+        problems.append(
+            f"The file says {expected_count} students but "
+            f"{len(students)} valid records were loaded."
+        )
 
     return students, problems
+
 
 def saveStudents(path, students):
     lines = [str(len(students))]
@@ -190,6 +215,7 @@ def saveStudents(path, students):
         messagebox.showerror("Save failed", f"The file could not be saved:\n{error}")
         return False
     return True
+
 
 def buildStudent(code_text, name, mark_texts, exam_text, existing_codes):
     name = name.strip()
@@ -219,10 +245,12 @@ def buildStudent(code_text, name, mark_texts, exam_text, existing_codes):
 
     return Student(code, name, coursework, exam)
 
+
 def averagePercentage(students):
     if not students:
         return 0.0
     return sum(student.percentage for student in students) / len(students)
+
 
 def findExtremes(students, highest=True):
     if not students:
@@ -232,8 +260,10 @@ def findExtremes(students, highest=True):
     target = pick(student.total for student in students)
     return [student for student in students if student.total == target]
 
+
 def sortStudents(students, key_name, descending=False):
     return sorted(students, key=SORT_KEYS[key_name], reverse=descending)
+
 
 def countGrades(students):
     counts = {grade: 0 for _, grade in GRADE_BOUNDARIES}
@@ -241,12 +271,15 @@ def countGrades(students):
         counts[student.grade] += 1
     return counts
 
+
 def searchStudents(students, text):
     text = text.lower()
     return [
-        student for student in students
+        student
+        for student in students
         if text in student.name.lower() or text in str(student.code)
     ]
+
 
 class StudentManager:
 
@@ -255,32 +288,34 @@ class StudentManager:
         self.root.title(WINDOW_TITLE)
         self.root.geometry(WINDOW_SIZE)
         self.root.minsize(1000, 800)
-        self.setupStyle()   
+        self.setupStyle()
 
-        #Student records
+        # Student records
         self.students, problems = loadStudents(DATA_FILE)
         if problems:
             self.reportProblems(problems)
 
-        #The search box text. The trace runs onSearchChange on every keystroke.
+        # The search box text. The trace runs onSearchChange on every keystroke.
         self.search_var = tk.StringVar()
-        self.ignore_search = False #True while the program itself changes the text
+        self.ignore_search = False  # True while the program itself changes the text
         self.search_var.trace_add("write", self.onSearchChange)
 
         self.createWidgets()
 
-        #What the table is showing, and which heading it is sorted by
+        # What the table is showing, and which heading it is sorted by
         self.shown_students = []
         self.sort_column = None
         self.sort_descending = False
-    
-        self.placeholder = tk.Label(self.root, text="Student Manager", font=("Arial", 24, "bold"))
+
+        self.placeholder = tk.Label(
+            self.root, text="Student Manager", font=("Arial", 24, "bold")
+        )
         self.placeholder.grid(row=0, column=0, pady=200)
 
     def setupStyle(self):
         self.root.configure(bg=BG)
 
-        #Default colours for plain Tkinter widgets created from now on
+        # Default colours for plain Tkinter widgets created from now on
         defaults = {
             "*Label.background": BG,
             "*Label.foreground": TEXT,
@@ -299,7 +334,7 @@ class StudentManager:
             "*Radiobutton.activeForeground": TEXT,
             "*Radiobutton.selectColor": CARD,
             "*Radiobutton.highlightThickness": 0,
-            #The drop-down list that opens from a Combobox
+            # The drop-down list that opens from a Combobox
             "*TCombobox*Listbox.background": CARD,
             "*TCombobox*Listbox.foreground": TEXT,
             "*TCombobox*Listbox.selectBackground": ACCENT,
@@ -308,13 +343,17 @@ class StudentManager:
         for pattern, value in defaults.items():
             self.root.option_add(pattern, value)
 
-        #"clam" is a ttk theme that lets us colour widgets on every system
+        # "clam" is a ttk theme that lets us colour widgets on every system
         style = ttk.Style()
         style.theme_use("clam")
 
         style.configure(
-            "TButton", background=ACCENT, foreground=BG,
-            font=("Arial", 11), padding=8, borderwidth=0,
+            "TButton",
+            background=ACCENT,
+            foreground=BG,
+            font=("Arial", 11),
+            padding=8,
+            borderwidth=0,
         )
         style.map(
             "TButton",
@@ -322,10 +361,13 @@ class StudentManager:
             foreground=[("disabled", MUTED)],
         )
 
-        #The menu buttons: dark, left-aligned, and teal when the mouse is over them
+        # The menu buttons: dark, left-aligned, and teal when the mouse is over them
         style.configure(
-            "Menu.TButton", background=CARD, foreground=TEXT,
-            anchor="w", padding=(14, 8),
+            "Menu.TButton",
+            background=CARD,
+            foreground=TEXT,
+            anchor="w",
+            padding=(14, 8),
         )
         style.map(
             "Menu.TButton",
@@ -334,8 +376,14 @@ class StudentManager:
         )
 
         style.configure(
-            "TCombobox", fieldbackground=CARD, background=CARD, foreground=TEXT,
-            arrowcolor=TEXT, bordercolor=BORDER, lightcolor=CARD, darkcolor=CARD,
+            "TCombobox",
+            fieldbackground=CARD,
+            background=CARD,
+            foreground=TEXT,
+            arrowcolor=TEXT,
+            bordercolor=BORDER,
+            lightcolor=CARD,
+            darkcolor=CARD,
         )
         style.map(
             "TCombobox",
@@ -345,11 +393,18 @@ class StudentManager:
             selectforeground=[("readonly", TEXT)],
         )
 
-        #The results table
+        # The results table
         style.configure(
-            "Treeview", background=CARD, fieldbackground=CARD, foreground=TEXT,
-            rowheight=28, borderwidth=0, font=("Arial", 11),
-            bordercolor=BG, lightcolor=BG, darkcolor=BG,
+            "Treeview",
+            background=CARD,
+            fieldbackground=CARD,
+            foreground=TEXT,
+            rowheight=28,
+            borderwidth=0,
+            font=("Arial", 11),
+            bordercolor=BG,
+            lightcolor=BG,
+            darkcolor=BG,
         )
         style.map(
             "Treeview",
@@ -357,30 +412,39 @@ class StudentManager:
             foreground=[("selected", BG)],
         )
         style.configure(
-            "Treeview.Heading", background=BORDER, foreground=TEXT,
-            font=("Arial", 11, "bold"), padding=6, borderwidth=0,
+            "Treeview.Heading",
+            background=BORDER,
+            foreground=TEXT,
+            font=("Arial", 11, "bold"),
+            padding=6,
+            borderwidth=0,
         )
         style.map("Treeview.Heading", background=[("active", CARD)])
 
         style.configure(
-            "TScrollbar", background=ACCENT, troughcolor=CARD, arrowcolor=BG,
-            bordercolor=CARD, lightcolor=ACCENT, darkcolor=ACCENT,
+            "TScrollbar",
+            background=ACCENT,
+            troughcolor=CARD,
+            arrowcolor=BG,
+            bordercolor=CARD,
+            lightcolor=ACCENT,
+            darkcolor=ACCENT,
         )
-        style.map("TScrollbar", background=[("active", ACCENT_HOVER)])        
+        style.map("TScrollbar", background=[("active", ACCENT_HOVER)])
 
     def reportProblems(self, problems):
         shown = problems[:MAX_PROBLEMS_SHOWN]
         message = "\n".join(shown)
         if len(problems) > MAX_PROBLEMS_SHOWN:
             message += f"\n...and {len(problems) - MAX_PROBLEMS_SHOWN} more."
-        messagebox.showwarning("Problems with the data file", message)   
+        messagebox.showwarning("Problems with the data file", message)
 
     def createWidgets(self):
-        #Left column holds the menu, right column holds the results
+        # Left column holds the menu, right column holds the results
         self.root.columnconfigure(1, weight=1)
         self.root.rowconfigure(0, weight=1)
 
-        #Menu
+        # Menu
         menu_frame = tk.Frame(self.root, padx=15, pady=15)
         menu_frame.grid(row=0, column=0, sticky="ns")
 
@@ -398,26 +462,32 @@ class StudentManager:
             ("9. Undo last change", self.undoLast),
         ]
         for text, handler in menu_options:
-            ttk.Button(menu_frame, text=text, width=28, style="Menu.TButton", command=lambda handler=handler: self.runOption(handler),).pack(pady=3)
+            ttk.Button(
+                menu_frame,
+                text=text,
+                width=28,
+                style="Menu.TButton",
+                command=lambda handler=handler: self.runOption(handler),
+            ).pack(pady=3)
 
-        #Grade chart under the menu
-        tk.Label(
-            menu_frame, text="GRADES", font=("Arial", 10, "bold"), fg=MUTED
-        ).pack(pady=(25, 5))
-        #The small width lets the menu buttons decide how wide the menu is
+        # Grade chart under the menu
+        tk.Label(menu_frame, text="GRADES", font=("Arial", 10, "bold"), fg=MUTED).pack(
+            pady=(25, 5)
+        )
+        # The small width lets the menu buttons decide how wide the menu is
         self.chart_canvas = tk.Canvas(
             menu_frame, width=100, height=170, bg=CARD, highlightthickness=0
         )
         self.chart_canvas.pack(fill="x")
-        self.chart_canvas.bind("<Configure>", self.drawChart)   # redraw when resized
+        self.chart_canvas.bind("<Configure>", self.drawChart)  # redraw when resized
 
-        #Results area
+        # Results area
         display_frame = tk.Frame(self.root, padx=10, pady=15)
         display_frame.grid(row=0, column=1, sticky="nsew")
         display_frame.columnconfigure(0, weight=1)
-        display_frame.rowconfigure(1, weight=1) #The table takes the spare height
+        display_frame.rowconfigure(1, weight=1)  # The table takes the spare height
 
-        #Search box above the table: it filters the rows as you type
+        # Search box above the table: it filters the rows as you type
         search_frame = tk.Frame(display_frame)
         search_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
 
@@ -427,31 +497,48 @@ class StudentManager:
         )
         self.search_entry.pack(side="left", padx=10, ipady=4)
         self.clear_button = ttk.Button(
-            search_frame, text="Clear", width=8,
+            search_frame,
+            text="Clear",
+            width=8,
             command=lambda: self.search_var.set(""),
         )
         self.clear_button.pack(side="left")
 
         headings = [heading for heading, _, _ in TABLE_COLUMNS]
-        self.table = ttk.Treeview(display_frame, columns=headings, show="headings", selectmode="browse")
+        self.table = ttk.Treeview(
+            display_frame, columns=headings, show="headings", selectmode="browse"
+        )
         for heading, width, alignment in TABLE_COLUMNS:
-            self.table.heading(heading, text=heading, command=lambda heading=heading: self.sortByColumn(heading))
+            self.table.heading(
+                heading,
+                text=heading,
+                command=lambda heading=heading: self.sortByColumn(heading),
+            )
             self.table.column(heading, width=width, anchor=alignment)
         self.table.grid(row=1, column=0, sticky="nsew")
 
-        #One tag per grade, so each row can be tinted by its grade
+        # One tag per grade, so each row can be tinted by its grade
         for grade, colour in GRADE_COLOURS.items():
             self.table.tag_configure(grade, background=colour)
 
-        scrollbar = ttk.Scrollbar(display_frame, orient="vertical", command=self.table.yview)
+        scrollbar = ttk.Scrollbar(
+            display_frame, orient="vertical", command=self.table.yview
+        )
         self.table.configure(yscrollcommand=scrollbar.set)
         scrollbar.grid(row=1, column=1, sticky="ns")
 
-        #Summary
-        self.summary_label = tk.Label(display_frame, text="Choose an option from the menu.", font=("Arial", 11), anchor="w",)
-        self.summary_label.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        # Summary
+        self.summary_label = tk.Label(
+            display_frame,
+            text="Choose an option from the menu.",
+            font=("Arial", 11),
+            anchor="w",
+        )
+        self.summary_label.grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0)
+        )
 
-        #Without any data there is nothing to show
+        # Without any data there is nothing to show
         if not self.students:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
             self.search_entry.config(state="disabled")
@@ -460,10 +547,10 @@ class StudentManager:
     def clearTable(self):
         self.table.delete(*self.table.get_children())
         self.shown_students = []
-        
+
     def showStudents(self, students, summary=None, keep_sort=False):
         self.clearTable()
-        self.shown_students = students #Remembering so heading can re-sort them
+        self.shown_students = students  # Remembering so heading can re-sort them
         if not keep_sort:
             self.sort_column = None
         self.updateHeadings()
@@ -480,7 +567,7 @@ class StudentManager:
                     f"{student.percentage:.1f}%",
                     student.grade,
                 ),
-                tags=(student.grade,), #Picks the row colour from GRADE_COLOURS
+                tags=(student.grade,),  # Picks the row colour from GRADE_COLOURS
             )
 
         if summary is None:
@@ -496,10 +583,10 @@ class StudentManager:
             return
         self.showStudents(self.students)
 
-    #Chart
+    # Chart
     def drawChart(self, event=None):
         canvas = self.chart_canvas
-        canvas.delete("all") #Wipe the old chart before drawing the new one
+        canvas.delete("all")  # Wipe the old chart before drawing the new one
         width = canvas.winfo_width()
         height = canvas.winfo_height()
 
@@ -509,10 +596,10 @@ class StudentManager:
             canvas.create_text(width / 2, height / 2, text="No data", fill=MUTED)
             return
 
-        top = 22 #Room for the number above the tallest bar
-        baseline = height - 24 #The bars stand on this line, with room for letters
+        top = 22  # Room for the number above the tallest bar
+        baseline = height - 24  # The bars stand on this line, with room for letters
         plot_height = baseline - top
-        slot = width / len(counts) #The width given to each bar
+        slot = width / len(counts)  # The width given to each bar
         bar_width = slot * 0.6
 
         for position, (grade, count) in enumerate(counts.items()):
@@ -522,86 +609,97 @@ class StudentManager:
 
             if count > 0:
                 canvas.create_rectangle(
-                    left, baseline - bar_height, left + bar_width, baseline,
-                    fill=GRADE_BAR_COLOURS[grade], width=0,
+                    left,
+                    baseline - bar_height,
+                    left + bar_width,
+                    baseline,
+                    fill=GRADE_BAR_COLOURS[grade],
+                    width=0,
                 )
             canvas.create_text(
-                centre, baseline - bar_height - 10, text=str(count),
-                fill=TEXT, font=("Arial", 10, "bold"),
+                centre,
+                baseline - bar_height - 10,
+                text=str(count),
+                fill=TEXT,
+                font=("Arial", 10, "bold"),
             )
             canvas.create_text(
                 centre, height - 11, text=grade, fill=MUTED, font=("Arial", 11, "bold")
             )
 
-    #Search
+    # Search
     def onSearchChange(self, *args):
         if self.ignore_search:
-            return #The program cleared the box itself, so don't search
+            return  # The program cleared the box itself, so don't search
 
         text = self.search_var.get().strip()
         if not text:
-            self.viewAll() #An empty box means "show everyone"
+            self.viewAll()  # An empty box means "show everyone"
             return
 
         matches = searchStudents(self.students, text)
 
-        #If a heading sort is active, keep the matches in that order
+        # If a heading sort is active, keep the matches in that order
         keep_sort = self.sort_column is not None
         if keep_sort:
             key_name, _ = COLUMN_SORT[self.sort_column]
             matches = sortStudents(matches, key_name, self.sort_descending)
 
         if matches:
-            summary = f"{len(matches)} of {len(self.students)} students match \"{text}\"."
+            summary = f'{len(matches)} of {len(self.students)} students match "{text}".'
         else:
-            summary = f"No students match \"{text}\"."
+            summary = f'No students match "{text}".'
         self.showStudents(matches, summary=summary, keep_sort=keep_sort)
 
     def runOption(self, handler):
-        self.ignore_search = True #Changing the text must not trigger a search
+        self.ignore_search = True  # Changing the text must not trigger a search
         self.search_var.set("")
         self.ignore_search = False
-        handler() 
-        self.drawChart() #The option may have added, deleted or changed a student
-      
-    #Dialogs        
+        handler()
+        self.drawChart()  # The option may have added, deleted or changed a student
+
+    # Dialogs
     def chooseStudent(self, title, prompt):
-        #Alphabetical order makes a long list easier to scan
+        # Alphabetical order makes a long list easier to scan
         if not self.students:
             return None
-        
+
         ordered = sorted(self.students, key=lambda student: student.name.lower())
         labels = [f"{student.name} ({student.code})" for student in ordered]
         chosen = None
 
         dialog = tk.Toplevel(self.root)
         dialog.title(title)
-        dialog.transient(self.root) #Keep it on top of the main window
+        dialog.transient(self.root)  # Keep it on top of the main window
         dialog.resizable(False, False)
 
         def confirm():
             nonlocal chosen
-            index = combo.current() #-1 if nothing is selected
+            index = combo.current()  # -1 if nothing is selected
             if index >= 0:
                 chosen = ordered[index]
             dialog.destroy()
 
         tk.Label(dialog, text=prompt, font=("Arial", 11)).pack(padx=20, pady=(15, 5))
 
-        #State="readonly" stops the user typing something that isn't in the list
+        # State="readonly" stops the user typing something that isn't in the list
         combo = ttk.Combobox(dialog, values=labels, state="readonly", width=35)
         combo.pack(padx=20, pady=5)
-        combo.current(0) #Preselect the first student
+        combo.current(0)  # Preselect the first student
 
         button_frame = tk.Frame(dialog)
         button_frame.pack(pady=(10, 15))
-        ttk.Button(button_frame, text="OK", width=10, command=confirm).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="OK", width=10, command=confirm).pack(
+            side="left", padx=5
+        )
+        ttk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(
+            side="left", padx=5
+        )
 
         dialog.bind("<Return>", lambda event: confirm())
         dialog.bind("<Escape>", lambda event: dialog.destroy())
 
-        #Modal: block the main window until this pop-up is closed
+        # Modal: block the main window until this pop-up is closed
         dialog.wait_visibility()
         dialog.grab_set()
         self.root.wait_window(dialog)
@@ -613,14 +711,12 @@ class StudentManager:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
 
-        student = self.chooseStudent(
-            "View individual record", "Select a student:"
-        )
+        student = self.chooseStudent("View individual record", "Select a student:")
         if student is None:
-            return #The user cancelled, so leave the display unchanged
+            return  # The user cancelled, so leave the display unchanged
 
-        self.showStudents([student], summary=f"Showing the record for {student.name}.")          
-        
+        self.showStudents([student], summary=f"Showing the record for {student.name}.")
+
     def showExtreme(self, highest):
         """Show the student(s) with the highest or lowest total mark.
 
@@ -648,18 +744,20 @@ class StudentManager:
         self.showExtreme(highest=True)
 
     def showLowest(self):
-        self.showExtreme(highest=False)    
+        self.showExtreme(highest=False)
 
     def updateHeadings(self):
         for heading, _, _ in TABLE_COLUMNS:
             text = heading
             if heading == self.sort_column:
-                text += "  \u25bc" if self.sort_descending else "  \u25b2" #Down / up arrow
+                text += (
+                    "  \u25bc" if self.sort_descending else "  \u25b2"
+                )  # Down / up arrow
             self.table.heading(heading, text=text)
 
     def sortByColumn(self, heading):
         if not self.shown_students:
-            return #Nothing on screen to sort
+            return  # Nothing on screen to sort
 
         key_name, first_descending = COLUMN_SORT[heading]
         if heading == self.sort_column:
@@ -669,7 +767,7 @@ class StudentManager:
             self.sort_descending = first_descending
 
         ordered = sortStudents(self.shown_students, key_name, self.sort_descending)
-        #Keep the summary text that is already showing
+        # Keep the summary text that is already showing
         self.showStudents(
             ordered, summary=self.summary_label.cget("text"), keep_sort=True
         )
@@ -688,20 +786,38 @@ class StudentManager:
             result = (key_combo.get(), direction.get() == "descending")
             dialog.destroy()
 
-        tk.Label(dialog, text="Sort by:", font=("Arial", 11)).pack(padx=20, pady=(15, 5))
-        key_combo = ttk.Combobox(dialog, values=list(SORT_KEYS), state="readonly", width=25)
+        tk.Label(dialog, text="Sort by:", font=("Arial", 11)).pack(
+            padx=20, pady=(15, 5)
+        )
+        key_combo = ttk.Combobox(
+            dialog, values=list(SORT_KEYS), state="readonly", width=25
+        )
         key_combo.pack(padx=20, pady=5)
         key_combo.current(0)
 
-        #Radio buttons share one variable, so only one can be selected
+        # Radio buttons share one variable, so only one can be selected
         direction = tk.StringVar(value="ascending")
-        tk.Radiobutton(dialog, text="Ascending (low to high, A-Z)", variable=direction, value="ascending",).pack(anchor="w", padx=30)
-        tk.Radiobutton(dialog, text="Descending (high to low, Z-A)", variable=direction, value="descending",).pack(anchor="w", padx=30)
+        tk.Radiobutton(
+            dialog,
+            text="Ascending (low to high, A-Z)",
+            variable=direction,
+            value="ascending",
+        ).pack(anchor="w", padx=30)
+        tk.Radiobutton(
+            dialog,
+            text="Descending (high to low, Z-A)",
+            variable=direction,
+            value="descending",
+        ).pack(anchor="w", padx=30)
 
         button_frame = tk.Frame(dialog)
         button_frame.pack(pady=(10, 15))
-        ttk.Button(button_frame, text="OK", width=10, command=confirm).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="OK", width=10, command=confirm).pack(
+            side="left", padx=5
+        )
+        ttk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(
+            side="left", padx=5
+        )
 
         dialog.bind("<Return>", lambda event: confirm())
         dialog.bind("<Escape>", lambda event: dialog.destroy())
@@ -719,16 +835,19 @@ class StudentManager:
 
         choice = self.chooseSortOrder()
         if choice is None:
-            return #Cancelled, so leave the display unchanged
+            return  # Cancelled, so leave the display unchanged
 
         key_name, descending = choice
         ordered = sortStudents(self.students, key_name, descending)
         direction = "descending" if descending else "ascending"
-        self.showStudents(ordered, summary=f"All {len(ordered)} students sorted by {key_name.lower()} ({direction}).",)    
+        self.showStudents(
+            ordered,
+            summary=f"All {len(ordered)} students sorted by {key_name.lower()} ({direction}).",
+        )
 
     def askStudentDetails(self, title, student=None):
         result = None
-        #A student keeping their own code must not clash with themselves
+        # A student keeping their own code must not clash with themselves
         existing_codes = {s.code for s in self.students if s is not student}
 
         dialog = tk.Toplevel(self.root)
@@ -737,14 +856,20 @@ class StudentManager:
         dialog.resizable(False, False)
 
         labels = [
-            "Student name", "Student code (1000-9999)",
-            "Coursework mark 1 (/20)", "Coursework mark 2 (/20)",
-            "Coursework mark 3 (/20)", "Exam mark (/100)",
+            "Student name",
+            "Student code (1000-9999)",
+            "Coursework mark 1 (/20)",
+            "Coursework mark 2 (/20)",
+            "Coursework mark 3 (/20)",
+            "Exam mark (/100)",
         ]
         initial = [""] * len(labels)
         if student is not None:
             initial = [
-                student.name, student.code, *student.coursework, student.exam,
+                student.name,
+                student.code,
+                *student.coursework,
+                student.exam,
             ]
 
         entries = []
@@ -766,7 +891,7 @@ class StudentManager:
             try:
                 result = buildStudent(code, name, [m1, m2, m3], exam, existing_codes)
             except ValueError as error:
-                error_label.config(text=str(error)) #Stay open so they can fix it
+                error_label.config(text=str(error))  # Stay open so they can fix it
                 return
             dialog.destroy()
 
@@ -792,19 +917,19 @@ class StudentManager:
     def addStudent(self):
         student = self.askStudentDetails("Add a student record")
         if student is None:
-            return #Cancelled
+            return  # Cancelled
 
         before = list(self.students)
         self.students.append(student)
         if not saveStudents(DATA_FILE, self.students):
-            self.students.remove(student) #Keep memory and file in step
+            self.students.remove(student)  # Keep memory and file in step
             return
         self.rememberUndo(before)
 
         self.showStudents(
             [student],
             summary=f"Added {student.name}. The class now has {len(self.students)} students.",
-        )  
+        )
 
     def deleteStudent(self):
         if not self.students:
@@ -815,7 +940,7 @@ class StudentManager:
             "Delete a student record", "Select the student to delete:"
         )
         if student is None:
-            return   #Cancelled
+            return  # Cancelled
 
         confirmed = messagebox.askyesno(
             "Confirm delete",
@@ -826,19 +951,22 @@ class StudentManager:
         if not confirmed:
             return
 
-        #Remember the position so the record can be put back if saving fails
+        # Remember the position so the record can be put back if saving fails
         before = list(self.students)
         position = self.students.index(student)
         self.students.remove(student)
 
         if not saveStudents(DATA_FILE, self.students):
-            self.students.insert(position, student) #Keep memory and file in step
+            self.students.insert(position, student)  # Keep memory and file in step
             return
         self.rememberUndo(before)
 
         self.clearTable()
         self.summary_label.config(
-            text=f"Deleted {student.name}. The class now has " f"{len(self.students)} students.", fg=TEXT,)           
+            text=f"Deleted {student.name}. The class now has "
+            f"{len(self.students)} students.",
+            fg=TEXT,
+        )
 
     def updateStudent(self):
         if not self.students:
@@ -849,29 +977,27 @@ class StudentManager:
             "Update a student record", "Select the student to update:"
         )
         if student is None:
-            return #Cancelled
+            return  # Cancelled
 
-        #The form is pre-filled, so the user only changes what they need to
-        updated = self.askStudentDetails(
-            f"Update {student.name}", student=student
-        )
+        # The form is pre-filled, so the user only changes what they need to
+        updated = self.askStudentDetails(f"Update {student.name}", student=student)
         if updated is None:
-            return #Cancelled
+            return  # Cancelled
 
-        #Swap the old record for the new one, keeping its position in the list
-        before=list(self.students)
+        # Swap the old record for the new one, keeping its position in the list
+        before = list(self.students)
         position = self.students.index(student)
         self.students[position] = updated
 
         if not saveStudents(DATA_FILE, self.students):
-            self.students[position] = student #Keep memory and file in step
+            self.students[position] = student  # Keep memory and file in step
             return
         self.rememberUndo(before)
 
     def rememberUndo(self, before):
         self.undo_stack.append(before)
         if len(self.undo_stack) > MAX_UNDO:
-            self.undo_stack.pop(0)   # forget the oldest change
+            self.undo_stack.pop(0)  # forget the oldest change
 
     def undoLast(self):
         if not self.undo_stack:
@@ -883,8 +1009,8 @@ class StudentManager:
         self.students = previous
 
         if not saveStudents(DATA_FILE, self.students):
-            self.students = current #Keep memory and file in step
-            self.undo_stack.append(previous) #The undo didn't happen, so keep it
+            self.students = current  # Keep memory and file in step
+            self.undo_stack.append(previous)  # The undo didn't happen, so keep it
             return
 
         self.showStudents(
@@ -895,10 +1021,12 @@ class StudentManager:
             ),
         )
 
+
 def main():
     root = tk.Tk()
     StudentManager(root)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()

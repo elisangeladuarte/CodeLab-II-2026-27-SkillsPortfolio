@@ -1,28 +1,40 @@
+# AI acknowledgement: this program was developed with help from Claude
+# Prompts used:
+# "Redesign the student manager with a light, professional theme"
+# "Make the window smaller so it fits on a laptop screen"
+
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import messagebox
 
-# Constants
 WINDOW_TITLE = "Student Manager"
-WINDOW_SIZE = "1100x660"
+WINDOW_SIZE = "1100x686"
+
 # Build the path from this script's location so it works from any folder
 DATA_FILE = Path(__file__).parent / "studentMarks.txt"
+
 # Maximum marks available (3 coursework marks of 20, plus an exam out of 100)
 MAX_COURSEWORK_MARK = 20
 MAX_EXAM_MARK = 100
 COURSEWORK_COUNT = 3
 MAX_TOTAL = COURSEWORK_COUNT * MAX_COURSEWORK_MARK + MAX_EXAM_MARK  # 160
+
+# Grade boundaries: (minimum percentage, grade), checked from highest to lowest
+GRADE_BOUNDARIES = [(70, "A"), (60, "B"), (50, "C"), (40, "D"), (0, "F")]
+
 # Valid range for a student code, and the number of comma-separated fields
+# on each line: code, name, three coursework marks, exam
 MIN_CODE = 1000
 MAX_CODE = 9999
 FIELDS_PER_LINE = COURSEWORK_COUNT + 3
+
 # Maximum number of file problems listed in the warning popup
 MAX_PROBLEMS_SHOWN = 5
-# How many changes can be undone
+
 MAX_UNDO = 10
-# Grade boundaries: minimum percentage, grade, checked from highest to lowest
-GRADE_BOUNDARIES = [(70, "A"), (60, "B"), (50, "C"), (40, "D"), (0, "F")]
-# Table columns: (heading, width in pixels, text alignment)
+
+# Table columns: (heading, width in pixels, text alignment). The widths add up
+# to 1012 pixels, which is the room inside the table card.
 TABLE_COLUMNS = [
     ("Name", 250, "w"),
     ("Number", 110, "center"),
@@ -32,22 +44,23 @@ TABLE_COLUMNS = [
     ("Grade", 132, "center"),
 ]
 TABLE_WIDTH = sum(width for _, width, _ in TABLE_COLUMNS)
-# Colours (kept in one place so the whole look can be changed easily)
-BG = "#F3F5F9"  # Window background (a very pale grey-blue)
-CARD = "#FFFFFF"  # White cards, table and entry boxes
-BORDER = "#E1E6EE"  # Thin outlines and dividers
-LINE = "#EDF0F5"  # The faint line between table rows
-ACCENT = "#2563EB"  # The main blue
-ACCENT_HOVER = "#1D4ED8"
-ACCENT_SOFT = "#EFF4FF"  # Pale blue for a selected row or option
-TEXT = "#1B2A41"  # Dark navy text
-MUTED = "#6B7A90"  # Secondary text
-ERROR = "#DC2626"
-SUCCESS = "#16A34A"
-OFF = "#A5B0C0"  # Text on a disabled button
-WHITE = "#FFFFFF"  # Text on blue buttons
 
-# Pale background for each grade (used for the grade chip in the table)
+# Colours
+BG = "#F3F5F9"
+CARD = "#FFFFFF"
+BORDER = "#E1E6EE"
+LINE = "#EDF0F5"
+ACCENT = "#2563EB"
+ACCENT_HOVER = "#1D4ED8"
+ACCENT_SOFT = "#EFF4FF"
+TEXT = "#1B2A41"
+MUTED = "#6B7A90"
+ERROR = "#DC2626"
+ERROR_HOVER = "#B91C1C"
+SUCCESS = "#16A34A"
+OFF = "#A5B0C0"
+WHITE = "#FFFFFF"
+
 GRADE_COLOURS = {
     "A": "#DCFCE7",
     "B": "#DBEAFE",
@@ -55,8 +68,6 @@ GRADE_COLOURS = {
     "D": "#FFEDD5",
     "F": "#FEE2E2",
 }
-
-# Strong colour for each grade (the chip letter, the chart bars and progress bars)
 GRADE_BAR_COLOURS = {
     "A": "#16A34A",
     "B": "#2563EB",
@@ -65,21 +76,18 @@ GRADE_BAR_COLOURS = {
     "F": "#DC2626",
 }
 
-# Font
 FONT = "Segoe UI"
 FONT_LIGHT = "Segoe UI Light"
-
-# Sizes of the cards in the top row (they add up to the 1032 pixels between
-# The window's left and right margins: 3 cards + 3 gaps of 16 + the chart card)
 STAT_WIDTH = 230
 STAT_HEIGHT = 128
 CHART_CARD_WIDTH = 294
-CHART_SIZE = (276, 110)  # The chart canvas, a little smaller than its card
-TABLE_CARD_SIZE = (1032, 440)  # The white card that holds the table
-HEADER_HEIGHT = 40  # The row of column headings
-TABLE_ROWS_HEIGHT = 380  # Room for the rows (440 - 20 margins - 40 heading)
-ROW_HEIGHT = 38  # One student row
-PROGRESS_WIDTH = 90  # The length of the percentage bar
+CHART_SIZE = (276, 110)
+TABLE_CARD_SIZE = (1032, 326)  # the white card that holds the table
+HEADER_HEIGHT = 40  # the row of column headings
+TABLE_ROWS_HEIGHT = 266  # room for seven rows (326 - 20 margins - 40 heading)
+ROW_HEIGHT = 38  # one student row
+PROGRESS_WIDTH = 90  # the length of the percentage bar
+MAX_CHOICES = 6  # students listed at once in the pick-a-student pop-up
 
 # Sort choices: label shown to the user -> function that gives the sort key
 SORT_KEYS = {
@@ -89,6 +97,7 @@ SORT_KEYS = {
     "Exam mark": lambda student: student.exam,
     "Overall percentage": lambda student: student.percentage,
 }
+
 # Table heading -> (sort key name from SORT_KEYS, True if the first click sorts high to low)
 COLUMN_SORT = {
     "Name": ("Name", False),
@@ -99,14 +108,12 @@ COLUMN_SORT = {
     "Grade": (
         "Overall percentage",
         True,
-    ),  # Grades follow the percentage, so A is first
+    ),  # grades follow the percentage, so A is first
 }
-
-# Drawing helpers
 
 
 def roundedRectangle(canvas, x1, y1, x2, y2, radius, fill, tag):
-
+    """Draw a filled rectangle with rounded corners on a canvas."""
     # The radius can't be bigger than half of the width or the height
     radius = min(radius, (x2 - x1) // 2, (y2 - y1) // 2)
     diameter = radius * 2
@@ -131,12 +138,13 @@ def roundedRectangle(canvas, x1, y1, x2, y2, radius, fill, tag):
 
 
 def drawOutlinedShape(canvas, width, height, radius, fill, edge):
-
+    """Draw a rounded shape with a thin outline."""
     roundedRectangle(canvas, 0, 0, width, height, radius, edge, "edge")
     roundedRectangle(canvas, 1, 1, width - 1, height - 1, radius - 1, fill, "shape")
 
 
 class RoundedButton(tk.Canvas):
+    """A clickable pill-shaped button, drawn on a canvas."""
 
     def __init__(
         self,
@@ -151,6 +159,7 @@ class RoundedButton(tk.Canvas):
         outline=BORDER,
         background=BG,
         bold=False,
+        align="center",
     ):
         super().__init__(
             parent,
@@ -170,10 +179,12 @@ class RoundedButton(tk.Canvas):
         self.active = False
 
         drawOutlinedShape(self, width, height, height // 2, fill, outline or fill)
+        text_x, anchor = (18, "w") if align == "w" else (width // 2, "center")
         self.label = self.create_text(
-            width // 2,
+            text_x,
             height // 2,
             text=text,
+            anchor=anchor,
             fill=text_colour,
             font=(FONT, 11, "bold" if bold else "normal"),
         )
@@ -183,13 +194,13 @@ class RoundedButton(tk.Canvas):
         self.bind("<Button-1>", self.click)
 
     def paint(self, fill, edge, text):
-
+        """Set the three colours of the button: inside, outline and text."""
         self.itemconfig("shape", fill=fill)
         self.itemconfig("edge", fill=edge)
         self.itemconfig(self.label, fill=text)
 
     def refresh(self, hovering=False):
-
+        """Colour the button for its current state."""
         if not self.enabled:
             self.paint(self.background, BORDER, OFF)
         elif self.active:
@@ -200,23 +211,24 @@ class RoundedButton(tk.Canvas):
             self.paint(inside, self.outline or inside, self.text_colour)
 
     def click(self, event):
-
+        """Run the button's command (unless the button is disabled)."""
         if self.enabled:
             self.command()
 
     def setEnabled(self, enabled):
-
+        """Turn the button on or off. A disabled button looks greyed out."""
         self.enabled = enabled
         self.config(cursor="hand2" if enabled else "arrow")
         self.refresh()
 
     def setActive(self, active):
-
+        """Highlight the button in blue, to show it is the chosen option."""
         self.active = active
         self.refresh()
 
 
 class Card(tk.Canvas):
+    """A white rounded panel. Put other widgets inside it using its .body frame."""
 
     def __init__(
         self, parent, width, height, radius=22, fill=CARD, background=BG, border=BORDER
@@ -231,7 +243,7 @@ class Card(tk.Canvas):
         drawOutlinedShape(self, width, height, radius, fill, border or fill)
 
         # The body is a plain square frame, so it must sit far enough from
-        # The edge to stay clear of the rounded corners (bigger radius = bigger gap)
+        # the edge to stay clear of the rounded corners (bigger radius = bigger gap)
         gap = radius // 3 + 2
         self.body = tk.Frame(self, bg=fill)
         self.create_window(
@@ -243,12 +255,12 @@ class Card(tk.Canvas):
         )
 
     def setEdge(self, colour):
-
+        """Change the colour of the outline (used for the focus highlight)."""
         self.itemconfig("edge", fill=colour)
 
 
 def makeEntry(parent, variable, width, height=42, size=12, fill=CARD, background=BG):
-
+    """Create a pill-shaped text box that gets a blue outline when it is clicked."""
     box = Card(
         parent,
         width=width,
@@ -276,34 +288,39 @@ def makeEntry(parent, variable, width, height=42, size=12, fill=CARD, background
 
 
 class Student:
+    """One student's record, with marks and calculated results."""
 
     def __init__(self, code, name, coursework, exam):
+        """Create a student record."""
         self.code = code
         self.name = name
         self.coursework = coursework
         self.exam = exam
-        # Earlier versions of the student list, newest last, for the undo option
-        self.undo_stack = []
 
     @property
     def coursework_total(self):
+        """int: the sum of the three coursework marks (out of 60)."""
         return sum(self.coursework)
 
     @property
     def total(self):
+        """int: coursework total plus exam mark (out of 160)."""
         return self.coursework_total + self.exam
 
     @property
     def percentage(self):
+        """float: the overall percentage, based on the 160 available marks."""
         return self.total / MAX_TOTAL * 100
 
     @property
     def grade(self):
+        """str: the letter grade for the overall percentage."""
         for minimum, grade in GRADE_BOUNDARIES:
             if self.percentage >= minimum:
                 return grade
 
     def __str__(self):
+        """Return a one-line summary, handy for debugging."""
         return (
             f"{self.code} {self.name}: {self.total}/{MAX_TOTAL} "
             f"({self.percentage:.1f}%) grade {self.grade}"
@@ -311,6 +328,7 @@ class Student:
 
 
 def parseStudent(line):
+    """Convert one line of the file into a Student."""
     parts = [part.strip() for part in line.split(",")]
     if len(parts) != FIELDS_PER_LINE:
         raise ValueError(f"expected {FIELDS_PER_LINE} fields but found {len(parts)}")
@@ -324,7 +342,6 @@ def parseStudent(line):
     if not name:
         raise ValueError("the student name is empty")
 
-    # The first three marks are coursework, the last one is the exam
     coursework = [int(mark) for mark in mark_texts[:COURSEWORK_COUNT]]
     exam = int(mark_texts[-1])
 
@@ -337,6 +354,7 @@ def parseStudent(line):
 
 
 def loadStudents(path):
+    """Read the data file once and return every valid student record."""
     students = []
     problems = []
     codes_seen = set()
@@ -381,7 +399,6 @@ def loadStudents(path):
     except (OSError, UnicodeDecodeError) as error:
         problems.append(f"The data file could not be read: {error}")
 
-    # Cross-check the count on the first line against what was loaded
     if expected_count is not None and expected_count != len(students):
         problems.append(
             f"The file says {expected_count} students but "
@@ -392,6 +409,7 @@ def loadStudents(path):
 
 
 def saveStudents(path, students):
+    """Write all students back to the data file."""
     lines = [str(len(students))]
     for student in students:
         marks = ",".join(str(mark) for mark in student.coursework)
@@ -407,6 +425,7 @@ def saveStudents(path, students):
 
 
 def buildStudent(code_text, name, mark_texts, exam_text, existing_codes):
+    """Validate raw form input and return a Student."""
     name = name.strip()
     if not name:
         raise ValueError("The name can't be empty.")
@@ -436,12 +455,14 @@ def buildStudent(code_text, name, mark_texts, exam_text, existing_codes):
 
 
 def averagePercentage(students):
+    """Return the average overall percentage for a list of students."""
     if not students:
         return 0.0
     return sum(student.percentage for student in students) / len(students)
 
 
 def findExtremes(students, highest=True):
+    """Return every student who shares the highest (or lowest) total mark."""
     if not students:
         return []
 
@@ -451,10 +472,12 @@ def findExtremes(students, highest=True):
 
 
 def sortStudents(students, key_name, descending=False):
+    """Return a sorted copy of a list of students."""
     return sorted(students, key=SORT_KEYS[key_name], reverse=descending)
 
 
 def countGrades(students):
+    """Count how many students got each grade."""
     counts = {grade: 0 for _, grade in GRADE_BOUNDARIES}
     for student in students:
         counts[student.grade] += 1
@@ -462,6 +485,7 @@ def countGrades(students):
 
 
 def searchStudents(students, text):
+    """Return the students whose name or student code contains the text."""
     text = text.lower()
     return [
         student
@@ -471,161 +495,47 @@ def searchStudents(students, text):
 
 
 class StudentManager:
+    """Main application class: holds the window and the student records."""
 
     def __init__(self, root):
+        """Set up the main window and load the student data."""
         self.root = root
         self.root.title(WINDOW_TITLE)
         self.root.geometry(WINDOW_SIZE)
         self.root.resizable(False, False)
         self.setupStyle()
 
-        # Student records
         self.students, problems = loadStudents(DATA_FILE)
         if problems:
             self.reportProblems(problems)
 
-        # The search box text. The trace runs onSearchChange on every keystroke.
+        self.shown_students = []
+        self.sort_column = None
+        self.sort_descending = False
+
+        self.undo_stack = []
+
         self.search_var = tk.StringVar()
         self.ignore_search = False  # True while the program itself changes the text
         self.search_var.trace_add("write", self.onSearchChange)
 
         self.createWidgets()
 
-        # What the table is showing, and which heading it is sorted by
-        self.shown_students = []
-        self.sort_column = None
-        self.sort_descending = False
-
-        self.placeholder = tk.Label(
-            self.root, text="Student Manager", font=("Arial", 24, "bold")
-        )
-        self.placeholder.pack(pady=200)
-
     def setupStyle(self):
+        """Apply the light theme to the window and the default widget colours."""
         self.root.configure(bg=BG)
 
-        # Default colours for plain Tkinter widgets created from now on
         defaults = {
             "*Font": f"{{{FONT}}} 11",
             "*Label.background": BG,
             "*Label.foreground": TEXT,
             "*Frame.background": BG,
-            "*Toplevel.background": BG,
-            "*Entry.background": CARD,
-            "*Entry.foreground": TEXT,
-            "*Entry.insertBackground": TEXT,
-            "*Entry.relief": "flat",
-            "*Entry.highlightThickness": 1,
-            "*Entry.highlightBackground": BORDER,
-            "*Entry.highlightColor": ACCENT,
-            "*Radiobutton.background": BG,
-            "*Radiobutton.foreground": TEXT,
-            "*Radiobutton.activeBackground": BG,
-            "*Radiobutton.activeForeground": TEXT,
-            "*Radiobutton.selectColor": CARD,
-            "*Radiobutton.highlightThickness": 0,
-            # The drop-down list that opens from a Combobox
-            "*TCombobox*Listbox.background": CARD,
-            "*TCombobox*Listbox.foreground": TEXT,
-            "*TCombobox*Listbox.selectBackground": ACCENT,
-            "*TCombobox*Listbox.selectForeground": WHITE,
         }
         for pattern, value in defaults.items():
             self.root.option_add(pattern, value)
 
-        # "clam" is a ttk theme that lets us colour widgets on every system
-        style = ttk.Style()
-        style.theme_use("clam")
-
-        style.configure(
-            "TButton",
-            background=ACCENT,
-            foreground=BG,
-            font=("Arial", 11),
-            padding=8,
-            borderwidth=0,
-        )
-        style.map(
-            "TButton",
-            background=[("active", ACCENT_HOVER), ("disabled", CARD)],
-            foreground=[("disabled", MUTED)],
-        )
-
-        # The menu buttons: dark, left-aligned, and teal when the mouse is over them
-        style.configure(
-            "Menu.TButton",
-            background=CARD,
-            foreground=TEXT,
-            anchor="w",
-            padding=(14, 8),
-        )
-        style.map(
-            "Menu.TButton",
-            background=[("active", ACCENT)],
-            foreground=[("active", WHITE)],
-        )
-
-        style.configure(
-            "TCombobox",
-            fieldbackground=CARD,
-            background=CARD,
-            foreground=TEXT,
-            arrowcolor=TEXT,
-            bordercolor=BORDER,
-            lightcolor=CARD,
-            darkcolor=CARD,
-        )
-        style.map(
-            "TCombobox",
-            fieldbackground=[("readonly", CARD)],
-            foreground=[("readonly", TEXT)],
-            selectbackground=[("readonly", CARD)],
-            selectforeground=[("readonly", TEXT)],
-        )
-
-        # The results table
-        style.configure(
-            "Treeview",
-            background=CARD,
-            fieldbackground=CARD,
-            foreground=TEXT,
-            rowheight=28,
-            borderwidth=0,
-            font=("Arial", 11),
-            bordercolor=BG,
-            lightcolor=BG,
-            darkcolor=BG,
-        )
-        style.map(
-            "Treeview",
-            background=[("selected", ACCENT)],
-            foreground=[("selected", WHITE)],
-        )
-        style.configure(
-            "Treeview.Heading",
-            background=BORDER,
-            foreground=TEXT,
-            font=(FONT, 11, "bold"),
-            padding=6,
-            borderwidth=0,
-        )
-        style.map("Treeview.Heading", background=[("active", CARD)])
-
-        style.configure(
-            "TScrollbar",
-            background=ACCENT,
-            troughcolor=CARD,
-            arrowcolor=BG,
-            bordercolor=CARD,
-            lightcolor=ACCENT,
-            darkcolor=ACCENT,
-        )
-        style.map("TScrollbar", background=[("active", ACCENT_HOVER)])
-
-    # Title, stat cards and grade chart
-
     def createHeader(self, parent):
-
+        """Build the top row: the title on the left (the search box joins it later)."""
         self.header = tk.Frame(parent)
         self.header.pack(fill="x", padx=34, pady=(26, 0))
 
@@ -634,11 +544,10 @@ class StudentManager:
         )
 
     def createStats(self, parent):
-
+        """Build the row of cards: average, highest, lowest and the grade chart."""
         row = tk.Frame(parent)
         row.pack(fill="x", padx=34, pady=(18, 0))
 
-        # Each stat card has a small caption, a big number and a line of detail
         self.stat_labels = {}
         for key, caption in (
             ("average", "AVERAGE"),
@@ -666,7 +575,6 @@ class StudentManager:
             detail.pack(fill="x", padx=10)
             self.stat_labels[key] = (value, detail)
 
-        # The grade chart sits in a card of its own
         chart_card = Card(row, width=CHART_CARD_WIDTH, height=STAT_HEIGHT)
         chart_card.pack(side="left")
         self.grade_chart = tk.Canvas(
@@ -679,7 +587,7 @@ class StudentManager:
         self.grade_chart.pack()
 
     def updateStats(self):
-
+        """Refresh the three stat cards and the chart from the whole class."""
         self.drawGradeChart()
 
         if not self.students:
@@ -698,7 +606,7 @@ class StudentManager:
         self.setStat("lowest", findExtremes(self.students, False), ERROR)
 
     def setStat(self, key, matches, colour):
-
+        """Fill in a highest or lowest card."""
         value, detail = self.stat_labels[key]
         name = matches[0].name
         if len(matches) > 1:
@@ -709,16 +617,16 @@ class StudentManager:
     def drawGradeChart(self):
         """Draw one rounded bar for each grade, showing how many students got it."""
         canvas = self.grade_chart
-        canvas.delete("all")  # Wipe the old chart before drawing the new one
+        canvas.delete("all")
         width, height = CHART_SIZE
 
         counts = countGrades(self.students)
-        biggest = max(max(counts.values()), 1)  # Avoids dividing by zero
+        biggest = max(max(counts.values()), 1)  # avoids dividing by zero
 
-        top = 20  # Room for the number above the tallest bar
-        baseline = height - 22  # The bars stand on this line, with room for letters
+        top = 20
+        baseline = height - 22
         plot_height = baseline - top
-        slot = width / len(counts)  # The width given to each bar
+        slot = width / len(counts)
         bar_width = slot * 0.5
 
         for position, (grade, count) in enumerate(counts.items()):
@@ -729,7 +637,7 @@ class StudentManager:
                 bar_height = max(plot_height * count / biggest, 8)
                 colour = GRADE_BAR_COLOURS[grade]
             else:
-                bar_height = 3  # A thin pale line, so the grade is still shown
+                bar_height = 3  # a thin pale line, so the grade is still shown
                 colour = GRADE_COLOURS[grade]
 
             roundedRectangle(
@@ -754,6 +662,7 @@ class StudentManager:
             )
 
     def reportProblems(self, problems):
+        """Show a warning listing the first few problems found in the file."""
         shown = problems[:MAX_PROBLEMS_SHOWN]
         message = "\n".join(shown)
         if len(problems) > MAX_PROBLEMS_SHOWN:
@@ -761,14 +670,13 @@ class StudentManager:
         messagebox.showwarning("Problems with the data file", message)
 
     def createWidgets(self):
-
+        """Build the title and search box, the stat cards, the menu and the table."""
         self.createHeader(self.root)
         self.createSearch(self.header)
         self.createStats(self.root)
         self.createMenu(self.root)
         self.createTableArea(self.root)
 
-        # Summary / status line under the table
         self.summary_label = tk.Label(
             self.root,
             text="Choose an option from the menu.",
@@ -783,6 +691,8 @@ class StudentManager:
         if not self.students:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
             self.search_entry.config(state="disabled")
+        else:
+            self.runOption(self.viewAll, "View all")
 
     def createSearch(self, parent):
         """Build the search box on the right of the header."""
@@ -803,7 +713,7 @@ class StudentManager:
 
         cross = tk.Label(
             self.search_entry,
-            text="\u2715",
+            text="✕",
             font=(FONT, 11),
             fg=MUTED,
             bg=CARD,
@@ -812,7 +722,7 @@ class StudentManager:
         cross.bind("<Button-1>", lambda event: self.search_var.set(""))
 
         def updateHint(*args):
-
+            """Show the hint while the box is empty, and the cross when it isn't."""
             if self.search_var.get():
                 hint.place_forget()
                 cross.place(relx=1.0, x=-2, rely=0.5, anchor="e")
@@ -820,15 +730,14 @@ class StudentManager:
                 cross.place_forget()
                 hint.place(x=2, y=0, relheight=1)
 
-        self.search_var.trace_add("write", updateHint)  # Runs on every change
+        self.search_var.trace_add("write", updateHint)
         updateHint()
 
     def createMenu(self, parent):
-
+        """Build the row of pill buttons, one for each menu option."""
         bar = tk.Frame(parent)
         bar.pack(fill="x", padx=34, pady=(18, 0))
 
-        # (button text, handler). The first five change what the table shows.
         options = [
             ("View all", self.viewAll),
             ("Individual", self.viewIndividual),
@@ -857,7 +766,7 @@ class StudentManager:
             self.menu_buttons[text] = button
 
     def createTableArea(self, parent):
-
+        """Build the white card that holds the table: a heading row and the rows."""
         card = Card(
             parent, width=TABLE_CARD_SIZE[0], height=TABLE_CARD_SIZE[1], radius=26
         )
@@ -881,7 +790,6 @@ class StudentManager:
         left = 0
         for number, (heading, width, alignment) in enumerate(TABLE_COLUMNS):
             tag = f"column{number}"
-            # A plain rectangle behind the text makes the whole column clickable
             heads.create_rectangle(
                 left,
                 0,
@@ -910,7 +818,6 @@ class StudentManager:
             heads.tag_bind(tag, "<Leave>", lambda event: heads.config(cursor=""))
             left += width
 
-        # The rows. One mouse wheel step scrolls by one row.
         self.rows_canvas = tk.Canvas(
             card.body,
             width=TABLE_WIDTH,
@@ -928,17 +835,16 @@ class StudentManager:
         )
 
     def columnPosition(self, left, width, alignment):
-
+        """Work out where the text of a column goes."""
         if alignment == "w":
             return left + 14, "w"
         return left + width // 2, "center"
 
     def drawRows(self, students):
-
+        """Draw one row for each student: text, a progress bar and a grade chip."""
         canvas = self.rows_canvas
         canvas.delete("all")
 
-        # The pale blue bar that follows the mouse (highlightRow moves it)
         roundedRectangle(
             canvas, 6, 0, TABLE_WIDTH - 6, ROW_HEIGHT - 2, 12, ACCENT_SOFT, "hover"
         )
@@ -958,7 +864,6 @@ class StudentManager:
             top = index * ROW_HEIGHT
             middle = top + ROW_HEIGHT // 2
 
-            # The x position of each column's centre, and where its text starts
             edges = []
             left = 0
             for _, width, alignment in TABLE_COLUMNS:
@@ -991,7 +896,6 @@ class StudentManager:
                 exam_x, middle, text=str(student.exam), fill=TEXT, font=(FONT, 11)
             )
 
-            # Percentage: a grey track, a coloured bar on top, and the number
             grade_colour = GRADE_BAR_COLOURS[student.grade]
             bar_left = percent_x - (PROGRESS_WIDTH + 10 + 46) // 2
             roundedRectangle(
@@ -1024,7 +928,6 @@ class StudentManager:
                 font=(FONT, 11),
             )
 
-            # Grade: the letter inside a small pale pill
             roundedRectangle(
                 canvas,
                 grade_x - 16,
@@ -1047,13 +950,12 @@ class StudentManager:
                 0, top + ROW_HEIGHT, TABLE_WIDTH, top + ROW_HEIGHT, fill=LINE
             )
 
-        # Tell the canvas how tall the rows are, so scrolling stops at the end
         height = max(len(students) * ROW_HEIGHT, TABLE_ROWS_HEIGHT)
         canvas.config(scrollregion=(0, 0, TABLE_WIDTH, height))
         canvas.yview_moveto(0)
 
     def highlightRow(self, event):
-
+        """Move the pale blue bar to the row under the mouse."""
         canvas = self.rows_canvas
         index = int(canvas.canvasy(event.y) // ROW_HEIGHT)
 
@@ -1066,36 +968,28 @@ class StudentManager:
             canvas.itemconfig("hover", state="hidden")
 
     def scrollRows(self, event):
-
+        """Scroll the rows up or down with the mouse wheel."""
         self.rows_canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
-        self.highlightRow(event)  # the row under the mouse has changed
+        self.highlightRow(event)
 
     def setActiveButton(self, name):
-
+        """Highlight one menu button in blue (or none, if name is None)."""
         for text, button in self.menu_buttons.items():
             button.setActive(text == name)
 
+    def clearTable(self):
+        """Remove every row from the results table."""
+        self.rows_canvas.delete("all")
+        self.shown_students = []
+
     def showStudents(self, students, summary=None, keep_sort=False):
+        """Display a list of students in the table, with a summary line."""
         self.clearTable()
-        self.shown_students = students  # Remembering so heading can re-sort them
+        self.shown_students = students  # remembered so headings can re-sort them
         if not keep_sort:
             self.sort_column = None
         self.updateHeadings()
-
-        for student in students:
-            self.table.insert(
-                "",
-                "end",
-                values=(
-                    student.name,
-                    student.code,
-                    student.coursework_total,
-                    student.exam,
-                    f"{student.percentage:.1f}%",
-                    student.grade,
-                ),
-                tags=(student.grade,),  # Picks the row colour from GRADE_COLOURS
-            )
+        self.drawRows(students)
 
         if summary is None:
             summary = (
@@ -1104,24 +998,50 @@ class StudentManager:
             )
         self.summary_label.config(text=summary, fg=TEXT)
 
-    def viewAll(self):
-        if not self.students:
-            self.summary_label.config(text="No student records loaded.", fg=ERROR)
-            return
-        self.showStudents(self.students)
+    def updateHeadings(self):
+        """Show an arrow, in blue, on the heading the table is sorted by."""
+        for heading, _, _ in TABLE_COLUMNS:
+            text = heading
+            sorted_here = heading == self.sort_column
+            if sorted_here:
+                text += "  ▼" if self.sort_descending else "  ▲"
+            self.heading_canvas.itemconfig(
+                self.heading_items[heading],
+                text=text,
+                fill=ACCENT if sorted_here else MUTED,
+            )
 
-    # Search
+    def sortByColumn(self, heading):
+        """Sort the rows now showing by the heading that was clicked."""
+        if not self.shown_students:
+            return
+
+        key_name, first_descending = COLUMN_SORT[heading]
+        if heading == self.sort_column:
+            self.sort_descending = not self.sort_descending
+        else:
+            self.sort_column = heading
+            self.sort_descending = first_descending
+
+        ordered = sortStudents(self.shown_students, key_name, self.sort_descending)
+        self.showStudents(
+            ordered, summary=self.summary_label.cget("text"), keep_sort=True
+        )
+
     def onSearchChange(self, *args):
+        """Filter the table every time the search text changes."""
         if self.ignore_search:
-            return  # The program cleared the box itself, so don't search
+            return  # the program cleared the box itself, so don't search
 
         text = self.search_var.get().strip()
         if not text:
-            self.activeButton("View all")
-            self.viewAll()  # An empty box means "show everyone"
+            self.setActiveButton("View all")
+            self.viewAll()
             return
 
-        self.setActiveButton(None)  # The table now shows search results
+        self.setActiveButton(None)
+
+        matches = searchStudents(self.students, text)
 
         # If a heading sort is active, keep the matches in that order
         keep_sort = self.sort_column is not None
@@ -1136,77 +1056,366 @@ class StudentManager:
         self.showStudents(matches, summary=summary, keep_sort=keep_sort)
 
     def runOption(self, handler, name=None):
-
-        self.ignore_search = True  # Changing the text must not trigger a search
+        """Clear the search box, then run a menu option."""
+        self.ignore_search = True  # changing the text must not trigger a search
         self.search_var.set("")
         self.ignore_search = False
 
         if name in self.view_names:
-            self.setActiveButton(name)  # show which view is on screen
+            self.setActiveButton(name)
         handler()
         self.updateStats()  # the option may have added, deleted or changed a student
 
-    # Dialogs
-    def chooseStudent(self, title, prompt):
-        # Alphabetical order makes a long list easier to scan
-        if not self.students:
-            return None
-
-        ordered = sorted(self.students, key=lambda student: student.name.lower())
-        labels = [f"{student.name} ({student.code})" for student in ordered]
-        chosen = None
-
+    def openDialog(self, title, subtitle, width):
+        """Create a white pop-up window with a heading and a line of help text."""
         dialog = tk.Toplevel(self.root)
         dialog.title(title)
-        dialog.transient(self.root)  # Keep it on top of the main window
+        dialog.configure(bg=CARD)
+        dialog.transient(self.root)
         dialog.resizable(False, False)
-
-        def confirm():
-            nonlocal chosen
-            index = combo.current()  # -1 if nothing is selected
-            if index >= 0:
-                chosen = ordered[index]
-            dialog.destroy()
-
-        tk.Label(dialog, text=prompt, font=("Arial", 11)).pack(padx=20, pady=(15, 5))
-
-        # State="readonly" stops the user typing something that isn't in the list
-        combo = ttk.Combobox(dialog, values=labels, state="readonly", width=35)
-        combo.pack(padx=20, pady=5)
-        combo.current(0)  # Preselect the first student
-
-        button_frame = tk.Frame(dialog)
-        button_frame.pack(pady=(10, 15))
-        ttk.Button(button_frame, text="OK", width=10, command=confirm).pack(
-            side="left", padx=5
-        )
-        ttk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(
-            side="left", padx=5
-        )
-
-        dialog.bind("<Return>", lambda event: confirm())
         dialog.bind("<Escape>", lambda event: dialog.destroy())
 
-        # Modal: block the main window until this pop-up is closed
+        body = tk.Frame(dialog, bg=CARD)
+        body.pack(padx=30, pady=26)
+        tk.Label(body, text=title, font=(FONT, 18, "bold"), bg=CARD, anchor="w").pack(
+            fill="x"
+        )
+        tk.Label(
+            body,
+            text=subtitle,
+            font=(FONT, 10),
+            fg=MUTED,
+            bg=CARD,
+            anchor="w",
+            justify="left",
+            wraplength=width,
+        ).pack(fill="x", pady=(2, 0))
+        return dialog, body
+
+    def addDialogButtons(self, body, dialog, confirm, confirm_text, danger=False):
+        """Add the Cancel and confirm buttons at the bottom of a pop-up."""
+        row = tk.Frame(body, bg=CARD)
+        row.pack(fill="x", pady=(22, 0))
+
+        RoundedButton(
+            row,
+            confirm_text,
+            confirm,
+            width=130,
+            height=42,
+            bold=True,
+            fill=ERROR if danger else ACCENT,
+            hover=ERROR_HOVER if danger else ACCENT_HOVER,
+            text_colour=WHITE,
+            outline=None,
+            background=CARD,
+        ).pack(side="right")
+        RoundedButton(
+            row,
+            "Cancel",
+            dialog.destroy,
+            width=100,
+            height=42,
+            bold=True,
+            fill=BG,
+            hover=BORDER,
+            text_colour=MUTED,
+            outline=None,
+            background=CARD,
+        ).pack(side="right", padx=(0, 10))
+
+        dialog.bind("<Return>", lambda event: confirm())
+
+    def showDialog(self, dialog):
+        """Centre a pop-up over the main window and wait until it is closed."""
+        dialog.update_idletasks()
+        x = (
+            self.root.winfo_rootx()
+            + (self.root.winfo_width() - dialog.winfo_reqwidth()) // 2
+        )
+        y = (
+            self.root.winfo_rooty()
+            + (self.root.winfo_height() - dialog.winfo_reqheight()) // 3
+        )
+        dialog.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+
         dialog.wait_visibility()
         dialog.grab_set()
         self.root.wait_window(dialog)
 
+    def chooseStudent(self, title, prompt, button_text="Select", danger=False):
+        """Show a pop-up with a search box and a short list, and return the pick."""
+        if not self.students:
+            return None
+
+        ordered = sorted(self.students, key=lambda student: student.name.lower())
+        chosen = None
+        shown = []
+        selected = 0
+
+        dialog, body = self.openDialog(title, prompt, 380)
+
+        search_var = tk.StringVar()
+        box, entry = makeEntry(body, search_var, width=380, fill=BG, background=CARD)
+        box.pack(pady=(16, 6))
+
+        # The list has a fixed height, so the pop-up doesn't change size as you type
+        list_frame = tk.Frame(body, bg=CARD, height=MAX_CHOICES * 48, width=380)
+        list_frame.pack()
+        list_frame.pack_propagate(False)
+        info = tk.Label(body, text="", font=(FONT, 10), fg=MUTED, bg=CARD, anchor="w")
+        info.pack(fill="x", pady=(6, 0))
+
+        def highlight():
+            """Colour the selected row blue and the others plain."""
+            for position, row in enumerate(list_frame.winfo_children()):
+                row.setActive(position == selected)
+
+        def choose(position):
+            """A row was clicked: select it."""
+            nonlocal selected
+            selected = position
+            highlight()
+
+        def move(step):
+            """The up or down key was pressed: move the selection."""
+            nonlocal selected
+            if shown:
+                selected = (selected + step) % len(shown)
+                highlight()
+
+        def refreshList(*args):
+            """Rebuild the list from whatever is typed in the search box."""
+            nonlocal shown, selected
+            for widget in list_frame.winfo_children():
+                widget.destroy()
+
+            matches = searchStudents(ordered, search_var.get().strip())
+            shown = matches[:MAX_CHOICES]
+            selected = 0
+
+            for position, student in enumerate(shown):
+                RoundedButton(
+                    list_frame,
+                    f"{student.name}   ({student.code})",
+                    lambda position=position: choose(position),
+                    width=380,
+                    height=42,
+                    align="w",
+                    background=CARD,
+                ).pack(pady=3)
+            highlight()
+
+            if not matches:
+                info.config(text="No students match.")
+            elif len(matches) > MAX_CHOICES:
+                info.config(
+                    text=f"Showing {MAX_CHOICES} of {len(matches)}. "
+                    "Keep typing to narrow the list."
+                )
+            else:
+                info.config(text="")
+
+        def confirm():
+            """Confirm button: remember the selection and close the pop-up."""
+            nonlocal chosen
+            if shown:
+                chosen = shown[selected]
+                dialog.destroy()
+
+        entry.bind("<Down>", lambda event: move(1))
+        entry.bind("<Up>", lambda event: move(-1))
+        search_var.trace_add("write", refreshList)
+        refreshList()
+
+        self.addDialogButtons(body, dialog, confirm, button_text, danger)
+        entry.focus_set()
+        self.showDialog(dialog)
+
         return chosen
 
+    def chooseSortOrder(self):
+        """Show a pop-up asking what to sort by and in which direction."""
+        result = None
+        choice = {"key": list(SORT_KEYS)[0], "descending": False}
+
+        dialog, body = self.openDialog(
+            "Sort records",
+            "Choose what to sort by. Ascending means A-Z or low to high.",
+            360,
+        )
+
+        key_buttons = {}
+        direction_buttons = {}
+
+        def refresh():
+            """Highlight the chosen sort key and the chosen direction."""
+            for key, button in key_buttons.items():
+                button.setActive(key == choice["key"])
+            direction_buttons[False].setActive(not choice["descending"])
+            direction_buttons[True].setActive(choice["descending"])
+
+        def pickKey(key):
+            choice["key"] = key
+            refresh()
+
+        def pickDirection(descending):
+            choice["descending"] = descending
+            refresh()
+
+        tk.Frame(body, bg=CARD, height=10).pack()
+        for key in SORT_KEYS:
+            button = RoundedButton(
+                body,
+                key,
+                lambda key=key: pickKey(key),
+                width=360,
+                height=42,
+                align="w",
+                background=CARD,
+            )
+            button.pack(pady=3)
+            key_buttons[key] = button
+
+        row = tk.Frame(body, bg=CARD)
+        row.pack(fill="x", pady=(14, 0))
+        for text, descending in (("Ascending", False), ("Descending", True)):
+            button = RoundedButton(
+                row,
+                text,
+                lambda descending=descending: pickDirection(descending),
+                width=174,
+                height=42,
+                background=CARD,
+            )
+            button.pack(side="left", padx=(0, 12))
+            direction_buttons[descending] = button
+        refresh()
+
+        def confirm():
+            """Sort button: remember the choices and close the pop-up."""
+            nonlocal result
+            result = (choice["key"], choice["descending"])
+            dialog.destroy()
+
+        self.addDialogButtons(body, dialog, confirm, "Sort")
+        self.showDialog(dialog)
+
+        return result
+
+    def askStudentDetails(self, title, student=None):
+        """Show a form for entering a student's details."""
+        result = None
+        # A student keeping their own code must not clash with themselves
+        existing_codes = {s.code for s in self.students if s is not student}
+
+        dialog, body = self.openDialog(
+            title, "Fill in every field, then press Save.", 430
+        )
+
+        initial = {"name": "", "code": "", "m1": "", "m2": "", "m3": "", "exam": ""}
+        if student is not None:
+            initial = {
+                "name": student.name,
+                "code": student.code,
+                "m1": student.coursework[0],
+                "m2": student.coursework[1],
+                "m3": student.coursework[2],
+                "exam": student.exam,
+            }
+
+        entries = {}
+
+        def addRow(fields):
+            """Add one row of labelled boxes. fields is (label, key, width) tuples."""
+            row = tk.Frame(body, bg=CARD)
+            row.pack(fill="x", pady=(14, 0))
+            for label, key, width in fields:
+                column = tk.Frame(row, bg=CARD)
+                column.pack(side="left", padx=(0, 12))
+                tk.Label(
+                    column,
+                    text=label,
+                    font=(FONT, 9, "bold"),
+                    fg=MUTED,
+                    bg=CARD,
+                    anchor="w",
+                ).pack(fill="x", pady=(0, 4))
+                box, entry = makeEntry(
+                    column, None, width=width, fill=BG, background=CARD
+                )
+                box.pack()
+                entry.insert(0, str(initial[key]))
+                entries[key] = entry
+
+        addRow([("Code (1000-9999)", "code", 140), ("Name", "name", 266)])
+        addRow(
+            [
+                ("Coursework 1 (/20)", "m1", 126),
+                ("Coursework 2 (/20)", "m2", 126),
+                ("Coursework 3 (/20)", "m3", 126),
+            ]
+        )
+        addRow([("Exam mark (/100)", "exam", 140)])
+
+        error_label = tk.Label(
+            body,
+            text="",
+            font=(FONT, 10),
+            fg=ERROR,
+            bg=CARD,
+            anchor="w",
+            justify="left",
+            wraplength=430,
+        )
+        error_label.pack(fill="x", pady=(14, 0))
+
+        def confirm():
+            """Save button: validate the form and close it if everything is valid."""
+            nonlocal result
+            values = {key: entry.get().strip() for key, entry in entries.items()}
+            try:
+                result = buildStudent(
+                    values["code"],
+                    values["name"],
+                    [values["m1"], values["m2"], values["m3"]],
+                    values["exam"],
+                    existing_codes,
+                )
+            except ValueError as error:
+                error_label.config(text=str(error))  # stay open so they can fix it
+                return
+            dialog.destroy()
+
+        self.addDialogButtons(body, dialog, confirm, "Save")
+        entries["code"].focus_set()
+        self.showDialog(dialog)
+
+        return result
+
+    def viewAll(self):
+        """Option 1: show every student record with the class summary."""
+        if not self.students:
+            self.summary_label.config(text="No student records loaded.", fg=ERROR)
+            return
+        self.showStudents(self.students)
+
     def viewIndividual(self):
+        """Option 2: let the user pick a student, then show their record."""
         if not self.students:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
 
-        student = self.chooseStudent("View individual record", "Select a student:")
+        student = self.chooseStudent(
+            "View individual record", "Select a student:", button_text="Show"
+        )
         if student is None:
-            return  # The user cancelled, so leave the display unchanged
+            return
 
         self.showStudents([student], summary=f"Showing the record for {student.name}.")
 
     def showExtreme(self, highest):
-
+        """Show the student(s) with the highest or lowest total mark."""
         if not self.students:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
@@ -1225,206 +1434,69 @@ class StudentManager:
         self.showStudents(matches, summary=summary)
 
     def showHighest(self):
+        """Option 3: show the student with the highest total score."""
         self.showExtreme(highest=True)
 
     def showLowest(self):
+        """Option 4: show the student with the lowest total score."""
         self.showExtreme(highest=False)
 
-    def updateHeadings(self):
-        for heading, _, _ in TABLE_COLUMNS:
-            text = heading
-            if heading == self.sort_column:
-                text += (
-                    "  \u25bc" if self.sort_descending else "  \u25b2"
-                )  # Down / up arrow
-            self.table.heading(heading, text=text)
-
-    def sortByColumn(self, heading):
-        if not self.shown_students:
-            return  # Nothing on screen to sort
-
-        key_name, first_descending = COLUMN_SORT[heading]
-        if heading == self.sort_column:
-            self.sort_descending = not self.sort_descending
-        else:
-            self.sort_column = heading
-            self.sort_descending = first_descending
-
-        ordered = sortStudents(self.shown_students, key_name, self.sort_descending)
-        # Keep the summary text that is already showing
-        self.showStudents(
-            ordered, summary=self.summary_label.cget("text"), keep_sort=True
-        )
-
-    def chooseSortOrder(self):
-        result = None
-
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Sort student records")
-        dialog.transient(self.root)
-        dialog.resizable(False, False)
-
-        def confirm():
-
-            nonlocal result
-            result = (key_combo.get(), direction.get() == "descending")
-            dialog.destroy()
-
-        tk.Label(dialog, text="Sort by:", font=("Arial", 11)).pack(
-            padx=20, pady=(15, 5)
-        )
-        key_combo = ttk.Combobox(
-            dialog, values=list(SORT_KEYS), state="readonly", width=25
-        )
-        key_combo.pack(padx=20, pady=5)
-        key_combo.current(0)
-
-        # Radio buttons share one variable, so only one can be selected
-        direction = tk.StringVar(value="ascending")
-        tk.Radiobutton(
-            dialog,
-            text="Ascending (low to high, A-Z)",
-            variable=direction,
-            value="ascending",
-        ).pack(anchor="w", padx=30)
-        tk.Radiobutton(
-            dialog,
-            text="Descending (high to low, Z-A)",
-            variable=direction,
-            value="descending",
-        ).pack(anchor="w", padx=30)
-
-        button_frame = tk.Frame(dialog)
-        button_frame.pack(pady=(10, 15))
-        ttk.Button(button_frame, text="OK", width=10, command=confirm).pack(
-            side="left", padx=5
-        )
-        ttk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(
-            side="left", padx=5
-        )
-
-        dialog.bind("<Return>", lambda event: confirm())
-        dialog.bind("<Escape>", lambda event: dialog.destroy())
-
-        dialog.wait_visibility()
-        dialog.grab_set()
-        self.root.wait_window(dialog)
-
-        return result
-
     def showSorted(self):
+        """Option 5: show every student, sorted as the user chooses."""
         if not self.students:
             self.summary_label.config(text="No student records loaded.", fg=ERROR)
             return
 
         choice = self.chooseSortOrder()
         if choice is None:
-            return  # Cancelled, so leave the display unchanged
+            return
 
         key_name, descending = choice
         ordered = sortStudents(self.students, key_name, descending)
         direction = "descending" if descending else "ascending"
         self.showStudents(
             ordered,
-            summary=f"All {len(ordered)} students sorted by {key_name.lower()} ({direction}).",
+            summary=(
+                f"All {len(ordered)} students sorted by "
+                f"{key_name.lower()} ({direction})."
+            ),
         )
-
-    def askStudentDetails(self, title, student=None):
-        result = None
-        # A student keeping their own code must not clash with themselves
-        existing_codes = {s.code for s in self.students if s is not student}
-
-        dialog = tk.Toplevel(self.root)
-        dialog.title(title)
-        dialog.transient(self.root)
-        dialog.resizable(False, False)
-
-        labels = [
-            "Student name",
-            "Student code (1000-9999)",
-            "Coursework mark 1 (/20)",
-            "Coursework mark 2 (/20)",
-            "Coursework mark 3 (/20)",
-            "Exam mark (/100)",
-        ]
-        initial = [""] * len(labels)
-        if student is not None:
-            initial = [
-                student.name,
-                student.code,
-                *student.coursework,
-                student.exam,
-            ]
-
-        entries = []
-        for row, (label, value) in enumerate(zip(labels, initial)):
-            tk.Label(dialog, text=label, anchor="w").grid(
-                row=row, column=0, sticky="w", padx=(20, 10), pady=4
-            )
-            entry = tk.Entry(dialog, width=25)
-            entry.insert(0, str(value))
-            entry.grid(row=row, column=1, padx=(0, 20), pady=4)
-            entries.append(entry)
-
-        error_label = tk.Label(dialog, text="", fg=ERROR, wraplength=300)
-        error_label.grid(row=len(labels), column=0, columnspan=2, pady=(5, 0))
-
-        def confirm():
-            nonlocal result
-            name, code, m1, m2, m3, exam = (entry.get().strip() for entry in entries)
-            try:
-                result = buildStudent(code, name, [m1, m2, m3], exam, existing_codes)
-            except ValueError as error:
-                error_label.config(text=str(error))  # Stay open so they can fix it
-                return
-            dialog.destroy()
-
-        button_frame = tk.Frame(dialog)
-        button_frame.grid(row=len(labels) + 1, column=0, columnspan=2, pady=15)
-        ttk.Button(button_frame, text="Save", width=10, command=confirm).pack(
-            side="left", padx=5
-        )
-        ttk.Button(button_frame, text="Cancel", width=10, command=dialog.destroy).pack(
-            side="left", padx=5
-        )
-
-        dialog.bind("<Return>", lambda event: confirm())
-        dialog.bind("<Escape>", lambda event: dialog.destroy())
-        entries[0].focus_set()
-
-        dialog.wait_visibility()
-        dialog.grab_set()
-        self.root.wait_window(dialog)
-
-        return result
 
     def addStudent(self):
+        """Option 6: add a new student and save the file."""
         student = self.askStudentDetails("Add a student record")
         if student is None:
-            return  # Cancelled
+            return
 
-        before = list(self.students)
+        before = list(self.students)  # a copy of the list, so undo can restore it
         self.students.append(student)
         if not saveStudents(DATA_FILE, self.students):
-            self.students.remove(student)  # Keep memory and file in step
+            self.students.remove(student)  # keep memory and file in step
             return
         self.rememberUndo(before)
 
         self.showStudents(
             [student],
-            summary=f"Added {student.name}. The class now has {len(self.students)} students.",
+            summary=(
+                f"Added {student.name}. "
+                f"The class now has {len(self.students)} students."
+            ),
         )
 
     def deleteStudent(self):
+        """Option 7: delete a student (after confirmation) and save the file."""
         if not self.students:
             self.summary_label.config(text="No student records to delete.", fg=ERROR)
             return
 
         student = self.chooseStudent(
-            "Delete a student record", "Select the student to delete:"
+            "Delete a student record",
+            "Select the student to delete:",
+            button_text="Delete",
+            danger=True,
         )
         if student is None:
-            return  # Cancelled
+            return
 
         confirmed = messagebox.askyesno(
             "Confirm delete",
@@ -1441,7 +1513,7 @@ class StudentManager:
         self.students.remove(student)
 
         if not saveStudents(DATA_FILE, self.students):
-            self.students.insert(position, student)  # Keep memory and file in step
+            self.students.insert(position, student)
             return
         self.rememberUndo(before)
 
@@ -1453,37 +1525,45 @@ class StudentManager:
         )
 
     def updateStudent(self):
+        """Option 8: edit an existing student's record and save the file."""
         if not self.students:
             self.summary_label.config(text="No student records to update.", fg=ERROR)
             return
 
         student = self.chooseStudent(
-            "Update a student record", "Select the student to update:"
+            "Update a student record",
+            "Select the student to update:",
+            button_text="Edit",
         )
         if student is None:
-            return  # Cancelled
+            return
 
-        # The form is pre-filled, so the user only changes what they need to
         updated = self.askStudentDetails(f"Update {student.name}", student=student)
         if updated is None:
-            return  # Cancelled
+            return
 
-        # Swap the old record for the new one, keeping its position in the list
         before = list(self.students)
         position = self.students.index(student)
         self.students[position] = updated
 
         if not saveStudents(DATA_FILE, self.students):
-            self.students[position] = student  # Keep memory and file in step
+            self.students[position] = student
             return
         self.rememberUndo(before)
 
+        self.showStudents(
+            [updated],
+            summary=f"Updated the record for {updated.name}.",
+        )
+
     def rememberUndo(self, before):
+        """Keep the student list as it was before a change, so it can be undone."""
         self.undo_stack.append(before)
         if len(self.undo_stack) > MAX_UNDO:
-            self.undo_stack.pop(0)  # forget the oldest change
+            self.undo_stack.pop(0)
 
     def undoLast(self):
+        """Option 9: put the class back the way it was before the last change."""
         if not self.undo_stack:
             self.summary_label.config(text="Nothing to undo.", fg=MUTED)
             return
@@ -1493,8 +1573,8 @@ class StudentManager:
         self.students = previous
 
         if not saveStudents(DATA_FILE, self.students):
-            self.students = current  # Keep memory and file in step
-            self.undo_stack.append(previous)  # The undo didn't happen, so keep it
+            self.students = current
+            self.undo_stack.append(previous)  # the undo didn't happen, so keep it
             return
 
         self.showStudents(
@@ -1507,6 +1587,7 @@ class StudentManager:
 
 
 def main():
+    """Create the Tkinter root window and start the event loop."""
     root = tk.Tk()
     StudentManager(root)
     root.mainloop()

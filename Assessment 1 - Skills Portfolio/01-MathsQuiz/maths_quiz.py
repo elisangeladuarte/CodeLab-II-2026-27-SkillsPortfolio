@@ -1,51 +1,51 @@
+# AI acknowledgement: this program was developed with help from Claude
+# Prompts used:
+# "Redesign the quiz so it looks modern, with a maths theme"
+# "Add sound effects and a sound on/off button"
+
 import json
 import random
+import subprocess
+import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk
 
-# Constants
 WINDOW_TITLE = "Maths Quiz"
 WINDOW_SIZE = "760x620"
 TOTAL_QUESTIONS = 10
 
-# Difficulty levels: number -> label shown on the button
 DIFFICULTY_LEVELS = {1: "Easy", 2: "Moderate", 3: "Advanced"}
 
 DIFFICULTY_HINTS = {1: "1-digit numbers", 2: "2-digit numbers", 3: "4-digit numbers"}
 
-# Difficulty level -> minimum, maximum value for each number
-# Easy = 1 digit (1-9), Moderate = 2 digits (10-99), Advanced = 4 digits (1000-9999)
+# Smallest and largest number used at each level
 DIFFICULTY_RANGES = {1: (1, 9), 2: (10, 99), 3: (1000, 9999)}
 
-# Points awarded, keyed by the attempt number, a failed second attempt scores 0
+# Points for a correct answer, by attempt number
 POINTS_PER_ATTEMPT = {1: 10, 2: 5}
 
-# How long in milliseconds feedback stays on screen before the next question
-FEEDBACK_DELAY_MS = 1200
+FEEDBACK_DELAY_MS = 1200  # how long feedback stays up before the next question
 
-# The streak label turns green once the streak reaches this length
-STREAK_HIGHLIGHT = 3
+STREAK_HIGHLIGHT = 3  # streak length at which the number turns green
 
-# Seconds allowed for each attempt, by difficulty level
+# Seconds allowed for each attempt, by level
 TIME_LIMITS = {1: 15, 2: 25, 3: 45}
 
-# The timer turns red when this many seconds (or fewer) are left
-WARNING_SECONDS = 5
+WARNING_SECONDS = 5  # the timer turns red at this many seconds left
 
-# Width and height (in pixels) of the small circular timer
-RING_SIZE = 64
+QUESTION_WIDTH = 520  # width of the quiz screen content, in pixels
 
-# Width (in pixels) of the stat tiles on the results screen
-TILE_WIDTH = 170
+# Font size of the question, by level (4-digit numbers need a smaller size to fit)
+QUESTION_SIZES = {1: 56, 2: 56, 3: 44}
 
-# Leaderboard
 LEADERBOARD_FILE = Path(__file__).parent / "leaderboard.json"
-MAX_SCORES = 5  # How many scores are kept for each difficulty
+SOUNDS_DIR = Path(__file__).parent / "sounds"
+sound_on = True
+MAX_SCORES = 5  # scores kept for each level
 MAX_NAME_LENGTH = 12
 DEFAULT_NAME = "Player"
 
-# Grade boundaries
+# (minimum score, grade), highest first
 GRADE_BOUNDARIES = [
     (91, "A+"),
     (80, "A"),
@@ -55,66 +55,44 @@ GRADE_BOUNDARIES = [
     (0, "F"),
 ]
 
+# Colours and fonts
 FONT = "Segoe UI"
-
-# Colours
-BG = "#0F0D24"  # Window background
-CARD = "#1A1740"  # Panels
-CARD_HOVER = "#262266"  # A button or row when the mouse is over it
-BORDER = "#322E70"  # Thin outlines
-ACCENT = "#7C5CFF"  # Main buttons
+FONT_LIGHT = "Segoe UI Light"
+BG = "#0F0D24"
+CARD = "#1A1740"
+CARD_HOVER = "#262266"
+BORDER = "#322E70"  # disabled buttons
+ACCENT = "#7C5CFF"
 ACCENT_HOVER = "#9077FF"
-ACCENT_SOFT = "#B3A6FF"  # Soft purple for small labels
+ACCENT_SOFT = "#B3A6FF"
 TEXT = "#F2F0FF"
 MUTED = "#9A96BF"
-SUCCESS = "#3DDC97"  # Correct
-WARN = "#FFB84D"  # Try again
-ERROR = "#FF6B7A"  # Wrong
+SUCCESS = "#3DDC97"  # correct
+WARN = "#FFB84D"  # second chance
+ERROR = "#FF6B7A"  # wrong
+SYMBOL = "#1C1944"  # faint maths symbols in the background
+
+# (symbol, x, y, font size, tilt in degrees), placed around the edges of the window
+SYMBOLS = [
+    ("\u03c0", 60, 100, 50, 10),
+    ("\u2211", 65, 250, 44, -8),
+    ("\u221a", 55, 400, 52, 6),
+    ("\u00f7", 60, 540, 40, 0),
+    ("%", 150, 330, 40, -4),
+    ("\u00d7", 705, 95, 44, -10),
+    ("+", 700, 250, 54, 0),
+    ("=", 705, 395, 46, 8),
+    ("\u221e", 695, 540, 52, -6),
+]
 
 
-def loadLeaderboard():
-    board = {str(level): [] for level in DIFFICULTY_LEVELS}
-
-    try:
-        with open(LEADERBOARD_FILE, "r", encoding="utf-8") as file:
-            saved = json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return board
-
-    if isinstance(saved, dict):
-        for level in board:
-            if level in saved:
-                board[level] = saved[level]
-    return board
-
-
-def saveLeaderboard(board):
-    try:
-        with open(LEADERBOARD_FILE, "w", encoding="utf-8") as file:
-            json.dump(board, file, indent=2)
-    except OSError:
-        return False
-    return True
-
-
-def addScore(board, level, name, score, best_streak):
-    entries = board[str(level)]
-    entry = {"name": name, "score": score, "streak": best_streak}
-    entries.append(entry)
-
-    # Highest score first. The sort is stable, so on a tie the older score stays higher.
-    entries.sort(key=lambda item: item["score"], reverse=True)
-    del entries[MAX_SCORES:]  # Drop anything below the top few
-
-    for position, item in enumerate(entries, start=1):
-        if item is entry:
-            return position, entry
-    return None, entry
-
-
-# Drawing helpers
 def roundedRectangle(canvas, x1, y1, x2, y2, radius, fill, tag):
-    # The radius can't be bigger than half of the width or the height
+    """Draw a filled rounded rectangle from four circles and two rectangles.
+
+    Every piece gets the same tag, so canvas.itemconfig(tag, fill=...)
+    recolours the whole shape.
+    """
+    # the radius can't be more than half of either side
     radius = min(radius, (x2 - x1) // 2, (y2 - y1) // 2)
     diameter = radius * 2
 
@@ -138,6 +116,7 @@ def roundedRectangle(canvas, x1, y1, x2, y2, radius, fill, tag):
 
 
 class RoundedButton(tk.Canvas):
+    """A clickable pill-shaped button drawn on a canvas."""
 
     def __init__(
         self,
@@ -147,7 +126,7 @@ class RoundedButton(tk.Canvas):
         width=200,
         height=46,
         hint="",
-        radius=23,
+        radius=30,
         fill=ACCENT,
         hover=ACCENT_HOVER,
         text_colour="white",
@@ -170,7 +149,6 @@ class RoundedButton(tk.Canvas):
         roundedRectangle(self, 0, 0, width, height, radius, fill, "shape")
 
         if hint:
-            # The name sits on the left and the small hint on the right
             self.label = self.create_text(
                 22,
                 height // 2,
@@ -202,7 +180,7 @@ class RoundedButton(tk.Canvas):
         self.bind("<Button-1>", self.click)
 
     def setHover(self, inside):
-
+        """Change colour while the mouse is over the button."""
         if not self.enabled:
             return
         self.itemconfig("shape", fill=self.hover if inside else self.fill)
@@ -210,12 +188,12 @@ class RoundedButton(tk.Canvas):
             self.itemconfig(self.hint, fill=TEXT if inside else MUTED)
 
     def click(self, event):
-
+        """Run the command unless the button is disabled."""
         if self.enabled:
             self.command()
 
     def setEnabled(self, enabled):
-
+        """Enable the button, or grey it out."""
         self.enabled = enabled
         if enabled:
             self.itemconfig("shape", fill=self.fill)
@@ -238,10 +216,11 @@ class Card(tk.Canvas):
             bg=background,
             highlightthickness=0,
         )
-        roundedRectangle(self, 0, 0, width, height, radius, fill, "shape")
+        # a 2 pixel ring in the background colour, recoloured when the box has focus
+        roundedRectangle(self, 0, 0, width, height, radius, background, "ring")
+        roundedRectangle(self, 2, 2, width - 2, height - 2, radius - 2, fill, "shape")
 
-        # The body is a plain square frame, so it must sit far enough from
-        # the edge to stay clear of the rounded corners (bigger radius = bigger gap)
+        # the body frame is square, so keep it clear of the rounded corners
         gap = radius // 3 + 2
         self.body = tk.Frame(self, bg=fill)
         self.create_window(
@@ -252,32 +231,126 @@ class Card(tk.Canvas):
             height=height - 2 * gap,
         )
 
+    def setRing(self, colour):
+        """Change the colour of the ring around the card."""
+        self.itemconfig("ring", fill=colour)
+
 
 def makeEntry(
-    parent, variable, width, background=CARD, size=13, justify="left", height=46
+    parent,
+    variable,
+    width,
+    background=CARD,
+    size=13,
+    justify="left",
+    height=46,
+    fill=BG,
 ):
+    """Create a pill-shaped text box.
 
+    background is the colour behind the box, fill is the box's own colour.
+    Returns (the card to pack, the Entry to read from).
+    """
     box = Card(
-        parent, width=width, height=height, radius=22, fill=BG, background=background
+        parent,
+        width=width,
+        height=height,
+        radius=height // 2,
+        fill=fill,
+        background=background,
     )
     entry = tk.Entry(
         box.body,
         textvariable=variable,
         font=(FONT, size),
         justify=justify,
-        bg=BG,
+        bg=fill,
         fg=TEXT,
         insertbackground=TEXT,
         relief="flat",
         highlightthickness=0,
-        disabledbackground=BG,
+        disabledbackground=fill,
         disabledforeground=MUTED,
     )
     entry.pack(fill="both", expand=True, padx=12)
+    entry.bind("<FocusIn>", lambda event: box.setRing(ACCENT))
+    entry.bind("<FocusOut>", lambda event: box.setRing(background))
     return box, entry
 
 
+def soundLabel():
+    """Return the text for the sound button."""
+    return "Sound: on" if sound_on else "Sound: off"
+
+
+def playSound(name):
+    """Play a short sound from the sounds folder without freezing the window."""
+    path = SOUNDS_DIR / name
+    if not sound_on or not path.exists():
+        return
+
+    try:
+        if sys.platform == "win32":
+            import winsound
+
+            winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_ASYNC)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["afplay", str(path)])
+        else:
+            subprocess.Popen(["aplay", "-q", str(path)])
+    except (OSError, RuntimeError):
+        pass  # a missing sound player must never stop the quiz
+
+
+def loadLeaderboard():
+    """Read the leaderboard file: {level as text: list of score entries}."""
+    board = {str(level): [] for level in DIFFICULTY_LEVELS}
+
+    try:
+        with open(LEADERBOARD_FILE, "r", encoding="utf-8") as file:
+            saved = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return board  # missing or damaged file: start empty
+
+    if isinstance(saved, dict):
+        for level in board:
+            if level in saved:
+                board[level] = saved[level]
+    return board
+
+
+def saveLeaderboard(board):
+    """Write the leaderboard to the file. Returns False if it can't be written."""
+    try:
+        with open(LEADERBOARD_FILE, "w", encoding="utf-8") as file:
+            json.dump(board, file, indent=2)
+    except OSError:
+        return False
+    return True
+
+
+def addScore(board, level, name, score, best_streak):
+    """Add a result to the board, keeping only the top scores.
+
+    Returns (rank, entry). The rank is 1 for the top spot, or None if the
+    score didn't make the list.
+    """
+    entries = board[str(level)]
+    entry = {"name": name, "score": score, "streak": best_streak}
+    entries.append(entry)
+
+    # sort is stable, so on a tie the older score stays higher
+    entries.sort(key=lambda item: item["score"], reverse=True)
+    del entries[MAX_SCORES:]
+
+    for position, item in enumerate(entries, start=1):
+        if item is entry:
+            return position, entry
+    return None, entry
+
+
 class MathsQuiz:
+    """The quiz window and its state."""
 
     def __init__(self, root):
         self.root = root
@@ -286,149 +359,186 @@ class MathsQuiz:
         self.root.resizable(False, False)
         self.setupStyle()
 
-        self.name_var = tk.StringVar()  # Holds the name box text between screens
+        self.name_var = tk.StringVar()  # keeps the name when the screen is redrawn
         self.leaderboard = loadLeaderboard()
 
         self.resetQuiz()
         self.displayMenu()
 
     def setupStyle(self):
+        """Set the window colour and the default colours of labels and frames."""
         self.root.configure(bg=BG)
-
         self.root.option_add("*Label.background", BG)
         self.root.option_add("*Label.foreground", TEXT)
         self.root.option_add("*Frame.background", BG)
 
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure(
-            "TButton",
-            background=ACCENT,
-            foreground="white",
-            font=("Arial", 12),
-            padding=8,
-            borderwidth=0,
-        )
-        style.map(
-            "TButton",
-            background=[("active", ACCENT_HOVER), ("disabled", CARD)],
-            foreground=[("disabled", MUTED)],
-        )
-
     def resetQuiz(self):
+        """Reset the quiz state ready for a new quiz."""
         self.difficulty = None
         self.question_number = 0
         self.score = 0
-        self.streak = 0
+        self.streak = 0  # correct first attempts in a row
         self.best_streak = 0
         self.attempt = 1
         self.num1 = 0
         self.num2 = 0
         self.operation = "+"
         self.correct_answer = 0
-        self.history = []
-        self.player_name = ""
-
-    def resetQuiz(self):
-        self.difficulty = None  # 1 = easy, 2 = moderate, 3 = advanced
-        self.question_number = 0  # Which question the user is on (1-10)
-        self.score = 0  # Running total out of 100
-        self.streak = 0  # Correct first attempt in a row
-        self.best_streak = 0  # Longest streak this quiz
-        self.attempt = 1  # 1 = first attempt, 2 = second attempt
-        self.num1 = 0  # Current question values
-        self.num2 = 0
-        self.operation = "+"
-        self.correct_answer = 0
-        self.time_left = 0  # Seconds left for the current attempt
-        self.timer_job = None  # The pending root.after call, so we can cancel it
-        self.history = []
-        self.current_answers = []
+        self.time_left = 0
+        self.timer_job = None  # pending root.after id, so it can be cancelled
+        self.history = []  # one dict per finished question
+        self.current_answers = []  # answers given for the current question
         self.player_name = DEFAULT_NAME
-        self.rank = None  # Leaderboard position of the latest result
-        self.last_entry = None  # The latest result, so its row can be highlighted
+        self.rank = None
+        self.last_entry = None  # latest result, so its leaderboard row is highlighted
         self.saved_ok = True
 
     def clearWindow(self):
+        """Remove every widget so a new screen can be drawn."""
         self.cancelTimer()
         for widget in self.root.winfo_children():
             widget.destroy()
 
+    def drawBackground(self, page):
+        """Draw the faint maths symbols in the space around the page.
+
+        A symbol that would run behind the page is skipped, because the page
+        frame would cut it off.
+        """
+        self.root.update_idletasks()
+        left, top = page.winfo_x(), page.winfo_y()
+        right, bottom = left + page.winfo_width(), top + page.winfo_height()
+
+        background = tk.Canvas(self.root, bg=BG, highlightthickness=0)
+        background.place(x=0, y=0, relwidth=1, relheight=1)
+        tk.Misc.lower(background)  # behind the page (Canvas has its own lower())
+
+        for symbol, x, y, size, tilt in SYMBOLS:
+            reach = size  # roughly how far the symbol extends from its centre
+            behind_page = (
+                left < x + reach
+                and x - reach < right
+                and top < y + reach
+                and y - reach < bottom
+            )
+            if not behind_page:
+                background.create_text(
+                    x,
+                    y,
+                    text=symbol,
+                    fill=SYMBOL,
+                    font=(FONT_LIGHT, size),
+                    angle=tilt,
+                )
+
     def displayMenu(self):
+        """Show the name box and the difficulty buttons."""
         self.clearWindow()
+
         page = tk.Frame(self.root)
         page.pack(expand=True)
 
-        tk.Label(page, text="Maths Quiz", font=(FONT, 32, "bold")).pack()
+        tk.Label(page, text="Maths Quiz", font=(FONT_LIGHT, 44)).pack()
         tk.Label(
             page,
-            text="10 questions  \u00b7  2 attempts each  \u00b7  beat the clock",
+            text=f"{TOTAL_QUESTIONS} questions \u00b7 two attempts \u00b7 beat the clock",
             font=(FONT, 11),
             fg=MUTED,
-        ).pack(pady=(4, 22))
+        ).pack(pady=(6, 34))
 
-        # Everything else sits inside one rounded card
-        card = Card(page, width=460, height=330)
-        card.pack()
-        body = card.body
+        box, entry = makeEntry(
+            page, self.name_var, width=380, height=50, background=BG, fill=CARD
+        )
+        box.pack(pady=(0, 26))
 
-        tk.Label(
-            body, text="YOUR NAME", font=(FONT, 9, "bold"), fg=MUTED, bg=CARD
-        ).pack(anchor="w", padx=20, pady=(20, 6))
-        name_box, _ = makeEntry(body, self.name_var, width=384)
-        name_box.pack(padx=20)
+        # hint text placed over the empty name box
+        hint = tk.Label(entry, text="Your name", font=(FONT, 13), fg=MUTED, bg=CARD)
+        hint.bind("<Button-1>", lambda event: entry.focus_set())
 
-        tk.Label(
-            body, text="DIFFICULTY LEVEL", font=(FONT, 9, "bold"), fg=MUTED, bg=CARD
-        ).pack(anchor="w", padx=20, pady=(18, 6))
+        def updateHint(event=None):
+            """Show the hint only while the name box is empty."""
+            if entry.get():
+                hint.place_forget()
+            else:
+                hint.place(x=2, y=0, relheight=1)
 
-        # level=level captures the current value for each button
+        entry.bind("<KeyRelease>", updateHint)
+        updateHint()
+
+        # level=level fixes the value for each button
         for level, name in DIFFICULTY_LEVELS.items():
             RoundedButton(
-                body,
-                f"{level}.  {name}",
+                page,
+                name,
                 lambda level=level: self.selectDifficulty(level),
-                width=384,
-                height=44,
+                width=380,
+                height=50,
                 hint=DIFFICULTY_HINTS[level],
-                fill=BG,
+                fill=CARD,
                 hover=ACCENT,
-                # outline=BORDER,
-                # hover_outline=ACCENT,
                 text_colour=TEXT,
-                background=CARD,
-            ).pack(padx=20, pady=3)
+                background=BG,
+            ).pack(pady=4)
+
+        extras = tk.Frame(page)
+        extras.pack(pady=(30, 0))
 
         RoundedButton(
-            page,
+            extras,
             "View leaderboard",
             lambda: self.displayLeaderboard(1, self.displayMenu),
             width=200,
-            height=40,
-            fill=BG,
+            height=48,
+            fill=CARD,
             hover=CARD_HOVER,
-            # outline=BG,
-            # hover_outline=BORDER,
-            text_colour=MUTED,
-        ).pack(pady=(18, 0))
+            text_colour=TEXT,
+        ).pack(side="left", padx=(0, 8))
+
+        sound_button = RoundedButton(
+            extras,
+            soundLabel(),
+            lambda: self.toggleSound(sound_button),
+            width=172,
+            height=48,
+            fill=CARD,
+            hover=CARD_HOVER,
+            text_colour=TEXT,
+        )
+        sound_button.pack(side="left")
+
+        self.drawBackground(page)
+
+    def toggleSound(self, button):
+        """Switch the sound effects on or off and update the button text."""
+        global sound_on
+        sound_on = not sound_on
+        button.itemconfig(button.label, text=soundLabel())
 
     def selectDifficulty(self, level):
+        """Start a new quiz at the chosen level."""
         name = self.name_var.get().strip()[:MAX_NAME_LENGTH] or DEFAULT_NAME
 
         self.resetQuiz()
         self.difficulty = level
+        self.player_name = name
         self.generateQuestion()
         self.displayProblem()
 
-    # Question generation
     def randomInt(self, difficulty):
+        """Return a random number in the range for this difficulty."""
         minimum, maximum = DIFFICULTY_RANGES[difficulty]
         return random.randint(minimum, maximum)
 
     def decideOperation(self):
+        """Return '+' or '-' at random."""
         return random.choice(["+", "-"])
 
+    def operationSymbol(self):
+        """Return the sign to display: a proper minus sign instead of a hyphen."""
+        return "\u2212" if self.operation == "-" else "+"
+
     def generateQuestion(self):
+        """Create a new question and its answer."""
         self.question_number += 1
         self.attempt = 1
         self.current_answers = []
@@ -441,130 +551,123 @@ class MathsQuiz:
         else:
             self.correct_answer = self.num1 - self.num2
 
-    # Question screen
     def displayProblem(self):
-
+        """Show the current question."""
         self.clearWindow()
 
         page = tk.Frame(self.root)
         page.pack(expand=True)
 
-        card = Card(page, width=520, height=440)
-        card.pack()
-        body = card.body
-
-        # Top row: question number on the left, small timer ring on the right
-        header = tk.Frame(body, bg=CARD)
-        header.pack(fill="x", padx=28, pady=(20, 0))
-
+        top = tk.Frame(page)
+        top.pack(fill="x")
         tk.Label(
-            header,
+            top,
             text=f"Question {self.question_number} of {TOTAL_QUESTIONS}",
             font=(FONT, 11),
             fg=MUTED,
-            bg=CARD,
         ).pack(side="left")
+        self.timer_label = tk.Label(top, text="", font=(FONT, 11))
+        self.timer_label.pack(side="right")
 
-        self.timer_canvas = tk.Canvas(
-            header,
-            width=RING_SIZE,
-            height=RING_SIZE,
-            bg=CARD,
-            highlightthickness=0,
-        )
-        self.timer_canvas.pack(side="right")
+        bar = tk.Canvas(page, width=QUESTION_WIDTH, height=4, highlightthickness=0)
+        bar.pack(pady=(12, 36))
+        roundedRectangle(bar, 0, 0, QUESTION_WIDTH, 4, 2, CARD, "track")
+        done = QUESTION_WIDTH * self.question_number // TOTAL_QUESTIONS
+        roundedRectangle(bar, 0, 0, done, 4, 2, ACCENT, "done")
 
-        self.attempt_label = tk.Label(body, text="", font=(FONT, 10, "bold"), bg=CARD)
+        self.attempt_label = tk.Label(page, text="", font=(FONT, 10, "bold"))
         self.attempt_label.pack()
 
-        tk.Label(
-            body,
-            text=f"{self.num1} {self.operation} {self.num2} =",
-            font=(FONT, 52, "bold"),
-            bg=CARD,
-        ).pack(pady=(6, 20))
+        equation = tk.Frame(page)
+        equation.pack(pady=(4, 0))
+        parts = [
+            (str(self.num1), TEXT),
+            (self.operationSymbol(), ACCENT_SOFT),
+            (str(self.num2), TEXT),
+            ("=", MUTED),
+            ("?", ACCENT_SOFT),
+        ]
+        for text, colour in parts:
+            tk.Label(
+                equation,
+                text=text,
+                fg=colour,
+                font=(FONT_LIGHT, QUESTION_SIZES[self.difficulty]),
+            ).pack(side="left", padx=6)
 
         box, self.answer_entry = makeEntry(
-            body, None, width=240, size=22, justify="center", height=58
+            page,
+            None,
+            width=260,
+            size=26,
+            justify="center",
+            height=66,
+            background=BG,
+            fill=CARD,
         )
-        box.pack()
+        box.pack(pady=(30, 0))
         self.answer_entry.focus_set()
         self.answer_entry.bind("<Return>", lambda event: self.checkAnswer())
 
-        self.feedback_label = tk.Label(body, text="", font=(FONT, 12), bg=CARD)
+        self.feedback_label = tk.Label(page, text="", font=(FONT, 12))
         self.feedback_label.pack(pady=(14, 10))
 
         self.submit_button = RoundedButton(
-            body,
+            page,
             "Submit",
             self.checkAnswer,
-            width=180,
-            height=46,
-            background=CARD,
+            width=200,
+            height=52,
+            background=BG,
         )
         self.submit_button.pack()
 
-        # Small stat chips under the card
-        chips = tk.Frame(page)
-        chips.pack(pady=(16, 0))
-        self.streak_label = self.makeChip(chips, "Streak", 120)
-        self.score_label = self.makeChip(chips, "Score", 120)
-        self.best_label = self.makeChip(chips, "Best streak", 150)
+        stats = tk.Frame(page)
+        stats.pack(pady=(44, 0))
+        self.streak_label = self.makeStat(stats, "Streak")
+        self.score_label = self.makeStat(stats, "Score")
+        self.best_label = self.makeStat(stats, "Best")
 
         self.updateAttemptLabel()
         self.updateStats()
         self.startTimer()
+        self.drawBackground(page)
 
-    def makeChip(self, parent, caption, width):
-
-        chip = Card(parent, width=width, height=40, radius=20)
-        chip.pack(side="left", padx=6)
-
-        inner = tk.Frame(chip.body, bg=CARD)
-        inner.pack(expand=True)
-        tk.Label(inner, text=caption, font=(FONT, 10), fg=MUTED, bg=CARD).pack(
+    def makeStat(self, parent, caption):
+        """Add a 'caption value' pair of labels. Returns the value label."""
+        pair = tk.Frame(parent)
+        pair.pack(side="left", padx=20)
+        tk.Label(pair, text=caption, font=(FONT, 11), fg=MUTED).pack(
             side="left", padx=(0, 6)
         )
-        value = tk.Label(inner, text="0", font=(FONT, 11, "bold"), bg=CARD)
+        value = tk.Label(pair, text="0", font=(FONT, 11, "bold"))
         value.pack(side="left")
         return value
 
-    def makeTile(self, parent, caption, pady=0, side="top", padx=0):
-
-        tile = Card(parent, width=TILE_WIDTH, height=108, radius=26)
-        tile.pack(pady=pady, side=side, padx=padx)
-        tk.Label(
-            tile.body, text=caption, font=(FONT, 9, "bold"), fg=MUTED, bg=CARD
-        ).pack(pady=(8, 0))
-        number = tk.Label(tile.body, text="0", font=(FONT, 24, "bold"), bg=CARD)
-        number.pack()
-        note = tk.Label(tile.body, text="", font=(FONT, 9), fg=MUTED, bg=CARD)
-        note.pack()
-        return number, note
-
     def updateAttemptLabel(self):
-
+        """Show LAST CHANCE on the second attempt only."""
         if self.attempt == 1:
-            self.attempt_label.config(text="FIRST ATTEMPT", fg=ACCENT_SOFT)
+            self.attempt_label.config(text=" ")
         else:
             self.attempt_label.config(text="LAST CHANCE", fg=WARN)
 
     def updateStats(self):
-
+        """Refresh the streak, score and best streak."""
         self.score_label.config(text=str(self.score))
 
         colour = SUCCESS if self.streak >= STREAK_HIGHLIGHT else TEXT
         self.streak_label.config(text=str(self.streak), fg=colour)
         self.best_label.config(text=str(self.best_streak))
 
-    # Timer
     def startTimer(self):
+        """Start the countdown for the current attempt."""
         self.cancelTimer()
         self.time_left = TIME_LIMITS[self.difficulty]
         self.drawTimer()
         self.timer_job = self.root.after(1000, self.tick)
 
     def tick(self):
+        """Count down one second, and time out at zero."""
         self.time_left -= 1
         self.drawTimer()
 
@@ -574,38 +677,21 @@ class MathsQuiz:
             self.timer_job = self.root.after(1000, self.tick)
 
     def cancelTimer(self):
+        """Stop the countdown if one is running."""
         if self.timer_job is not None:
             self.root.after_cancel(self.timer_job)
             self.timer_job = None
 
     def drawTimer(self):
-
-        canvas = self.timer_canvas
-        canvas.delete("all")
-
-        edge = 5
-        size = RING_SIZE
-        fraction = max(self.time_left, 0) / TIME_LIMITS[self.difficulty]
-        colour = ERROR if self.time_left <= WARNING_SECONDS else ACCENT
-
-        # The grey track (a full circle)
-        canvas.create_oval(edge, edge, size - edge, size - edge,
-                           outline=BORDER, width=5)
-
-        # The coloured arc starts at the top and shrinks as time runs out.
-        # (359.9 instead of 360 because a full 360 degree arc doesn't draw.)
-        if fraction > 0:
-            canvas.create_arc(
-                edge, edge, size - edge, size - edge, style="arc", start=90,
-                extent=-359.9 * fraction, outline=colour, width=5,
-            )
-
-        canvas.create_text(size // 2, size // 2, text=str(max(self.time_left, 0)),
-                           fill=TEXT, font=(FONT, 14, "bold"))
+        """Show the seconds left, in red when time is nearly up."""
+        colour = ERROR if self.time_left <= WARNING_SECONDS else MUTED
+        self.timer_label.config(text=f"{max(self.time_left, 0)} s", fg=colour)
 
     def timeUp(self):
+        """Count running out of time as a wrong attempt."""
         self.timer_job = None
-        self.current_answers.append(None)
+        self.current_answers.append(None)  # None = no answer given
+        playSound("wrong.wav")
 
         if self.attempt == 1:
             self.feedback_label.config(text="Time's up! Try once more!", fg=WARN)
@@ -615,26 +701,28 @@ class MathsQuiz:
             )
         self.handleMiss()
 
-    # Checking answers
     def checkAnswer(self):
-
+        """Handle Submit: validate the input, check it and score it."""
+        # ignore Enter while the inputs are locked between questions
         if str(self.answer_entry.cget("state")) == "disabled":
             return
 
         text = self.answer_entry.get().strip()
 
+        # int() accepts negatives like "-54" and rejects empty or text input
         try:
             user_answer = int(text)
         except ValueError:
             self.feedback_label.config(text="Please enter a whole number.", fg=ERROR)
             self.answer_entry.focus_set()
-            return
+            return  # invalid input does not use up an attempt
 
         self.current_answers.append(user_answer)
 
         if self.isCorrect(user_answer, self.correct_answer, self.attempt):
             self.score += POINTS_PER_ATTEMPT[self.attempt]
 
+            # only a first-attempt answer extends the streak
             if self.attempt == 1:
                 self.streak += 1
                 self.best_streak = max(self.best_streak, self.streak)
@@ -646,9 +734,11 @@ class MathsQuiz:
             self.handleMiss()
 
     def isCorrect(self, user_answer, correct_answer, attempt):
+        """Check the answer and show the feedback. Returns True if it was correct."""
         if user_answer == correct_answer:
             points = POINTS_PER_ATTEMPT[attempt]
             self.feedback_label.config(text=f"Correct! +{points} points", fg=SUCCESS)
+            playSound("correct.wav")
             return True
 
         if attempt == 1:
@@ -657,11 +747,13 @@ class MathsQuiz:
             self.feedback_label.config(
                 text=f"Wrong. The answer was {correct_answer}.", fg=ERROR
             )
+        playSound("wrong.wav")
         return False
 
     def handleMiss(self):
+        """Handle a wrong answer or a timeout."""
         if self.attempt == 1:
-            # A first-attempt miss ends the streak and gives a second go
+            # missing the first attempt ends the streak and gives a second go
             self.streak = 0
             self.attempt = 2
             self.updateStats()
@@ -674,22 +766,25 @@ class MathsQuiz:
             self.finishQuestion()
 
     def recordQuestion(self, points):
+        """Save a finished question for the review screen."""
         self.history.append(
             {
-                "question": f"{self.num1} {self.operation} {self.num2} =",
-                "answers": list(self.current_answers),  # A copy of the list
+                "question": f"{self.num1} {self.operationSymbol()} {self.num2} =",
+                "answers": list(self.current_answers),
                 "correct": self.correct_answer,
                 "points": points,
             }
         )
 
     def finishQuestion(self):
+        """Lock the inputs while the feedback is read, then move on."""
+        self.cancelTimer()
         self.answer_entry.config(state="disabled")
         self.submit_button.setEnabled(False)
         self.root.after(FEEDBACK_DELAY_MS, self.nextQuestion)
 
     def nextQuestion(self):
-        self.cancelTimer()
+        """Show the next question, or finish after the last one."""
         if self.question_number < TOTAL_QUESTIONS:
             self.generateQuestion()
             self.displayProblem()
@@ -697,6 +792,7 @@ class MathsQuiz:
             self.finishQuiz()
 
     def finishQuiz(self):
+        """Add the score to the leaderboard, save it and show the results."""
         self.rank, self.last_entry = addScore(
             self.leaderboard,
             self.difficulty,
@@ -705,30 +801,35 @@ class MathsQuiz:
             self.best_streak,
         )
         self.saved_ok = saveLeaderboard(self.leaderboard)
+        playSound("highscore.wav" if self.rank == 1 else "finish.wav")
         self.displayResults(self.score)
 
-    # Results
     def getGrade(self, score):
+        """Return the letter grade for a score out of 100."""
         for minimum, grade in GRADE_BOUNDARIES:
             if score >= minimum:
                 return grade
 
     def displayResults(self, score):
+        """Show the final score and grade."""
         self.clearWindow()
 
         page = tk.Frame(self.root)
         page.pack(expand=True)
 
-        tk.Label(page, text="Quiz Complete!", font=(FONT, 30, "bold")).pack()
         level_name = DIFFICULTY_LEVELS[self.difficulty]
         tk.Label(
             page,
             text=f"{self.player_name} \u00b7 {level_name}",
             font=(FONT, 11),
             fg=MUTED,
-        ).pack(pady=(4, 18))
+        ).pack()
 
-        # A rounded banner that says how the score did on the leaderboard
+        tk.Label(page, text=str(score), font=(FONT_LIGHT, 110)).pack(pady=(10, 0))
+        tk.Label(
+            page, text=f"out of {TOTAL_QUESTIONS * 10}", font=(FONT, 12), fg=MUTED
+        ).pack()
+
         if self.rank == 1:
             message, colour = "New high score!", WARN
         elif self.rank is not None:
@@ -740,42 +841,25 @@ class MathsQuiz:
         if not self.saved_ok:
             message += " (The leaderboard file couldn't be saved.)"
 
-        banner = Card(page, width=560, height=40, radius=18)
-        banner.pack(pady=(0, 18))
-        tk.Label(banner.body, text=message, font=(FONT, 11), fg=colour, bg=CARD).pack(
-            expand=True
-        )
+        tk.Label(page, text=message, font=(FONT, 12), fg=colour).pack(pady=(22, 0))
 
-        # Three tiles side by side
-        tiles = tk.Frame(page)
-        tiles.pack(pady=(0, 22))
+        stats = tk.Frame(page)
+        stats.pack(pady=(22, 40))
+        self.makeStat(stats, "Best streak").config(text=str(self.best_streak))
+        self.makeStat(stats, "Grade").config(text=self.getGrade(score), fg=ACCENT_SOFT)
 
-        number, note = self.makeTile(tiles, "FINAL SCORE", side="left", padx=8)
-        number.config(text=str(score))
-        note.config(text=f"out of {TOTAL_QUESTIONS * 10}")
-
-        number, note = self.makeTile(tiles, "BEST STREAK", side="left", padx=8)
-        number.config(text=str(self.best_streak))
-        note.config(text="first tries in a row")
-
-        number, note = self.makeTile(tiles, "GRADE", side="left", padx=8)
-        number.config(text=self.getGrade(score), fg=ACCENT_SOFT)
-
-        # Buttons sit side by side inside a frame
         buttons = tk.Frame(page)
         buttons.pack()
 
-        RoundedButton(buttons, "Review answers", self.displayReview, width=150).pack(
-            side="left", padx=6
-        )
+        RoundedButton(
+            buttons, "Review answers", self.displayReview, width=150, height=48
+        ).pack(side="left", padx=6)
 
-        # Dark buttons use the same options, so keep them in one dictionary
         quiet = dict(
             width=150,
+            height=48,
             fill=CARD,
             hover=CARD_HOVER,
-            #outline=BORDER,
-            #hover_outline=ACCENT,
             text_colour=TEXT,
         )
         RoundedButton(
@@ -791,41 +875,48 @@ class MathsQuiz:
         )
         RoundedButton(buttons, "Quit", self.quitQuiz, **quiet).pack(side="left", padx=6)
 
+        self.drawBackground(page)
+
     def displayReview(self):
+        """Show every question with the answers given and the correct answer."""
         self.clearWindow()
 
         page = tk.Frame(self.root)
         page.pack(expand=True)
 
-        tk.Label(page, text="Review your answers", font=(FONT, 24, "bold")).pack(
-            pady=(0, 10)
-        )
+        tk.Label(page, text="Review", font=(FONT_LIGHT, 40)).pack()
+        tk.Label(
+            page,
+            text=f"{self.player_name} \u00b7 {DIFFICULTY_LEVELS[self.difficulty]}"
+            f" \u00b7 {self.score} out of {TOTAL_QUESTIONS * 10}",
+            font=(FONT, 11),
+            fg=MUTED,
+        ).pack(pady=(2, 16))
 
-        # Column widths (in pixels) shared by the heading row and every row
-        widths = [50, 190, 170, 100, 90]
+        # the heading and every row share these column widths
+        widths = [40, 190, 170, 100, 80]
+        headings = ["", "QUESTION", "YOUR ANSWER", "CORRECT", "POINTS"]
 
-        # Heading row
-        heading_row = tk.Frame(page)
-        heading_row.pack(padx=(0, 24))  # Lines the headings up with the row text
-        for column, heading in enumerate(
-            ["", "QUESTION", "YOUR ANSWER", "CORRECT", "POINTS"]
-        ):
-            heading_row.columnconfigure(column, minsize=widths[column])
+        table = tk.Frame(page)
+        table.pack()
+        for column, width in enumerate(widths):
+            table.columnconfigure(column, minsize=width)
+
+        for column, heading in enumerate(headings):
             tk.Label(
-                heading_row,
+                table,
                 text=heading,
                 font=(FONT, 9, "bold"),
                 fg=MUTED,
                 anchor="w",
-            ).grid(row=0, column=column, sticky="w")
+            ).grid(row=0, column=column, sticky="w", pady=(0, 8))
 
-        # One rounded row per question
-        for record in self.history:
+        for number, record in enumerate(self.history, start=1):
             points = record["points"]
             if points == POINTS_PER_ATTEMPT[1]:
                 points_colour, icon = SUCCESS, "\u2713"
             elif points > 0:
-                points_colour, icon = WARN, "\u2713"  # Right, but on the second try
+                points_colour, icon = WARN, "\u2713"  # right, but on the second try
             else:
                 points_colour, icon = ERROR, "\u2717"
 
@@ -834,41 +925,39 @@ class MathsQuiz:
                 "-" if answer is None else str(answer) for answer in record["answers"]
             )
 
-            row = Card(page, width=640, height=36, radius=16)
-            row.pack(pady=2)
-
             values = [icon, record["question"], given, record["correct"], points]
             for column, value in enumerate(values):
-                row.body.columnconfigure(column, minsize=widths[column])
                 colour = points_colour if column in (0, 4) else TEXT
                 tk.Label(
-                    row.body,
+                    table,
                     text=value,
-                    font=(FONT, 11),
+                    font=(FONT, 12),
                     fg=colour,
-                    bg=CARD,
                     anchor="w",
-                ).grid(row=0, column=column, sticky="w")
+                ).grid(row=number, column=column, sticky="w", pady=4)
 
         RoundedButton(
             page,
             "Back to results",
             lambda: self.displayResults(self.score),
             width=200,
-            height=42,
-        ).pack(pady=(14, 0))
+            height=48,
+        ).pack(pady=(26, 0))
+
+        self.drawBackground(page)
 
     def displayLeaderboard(self, level, back):
+        """Show the top scores for one level. back is run by the Back button."""
         self.clearWindow()
 
         page = tk.Frame(self.root)
         page.pack(expand=True)
 
-        tk.Label(page, text="Leaderboard", font=(FONT, 30, "bold")).pack(pady=(0, 14))
+        tk.Label(page, text="Leaderboard", font=(FONT_LIGHT, 40)).pack(pady=(0, 18))
 
-        # One tab per difficulty. The one being shown is filled with purple.
+        # one tab per level; the current one is filled
         tabs = tk.Frame(page)
-        tabs.pack(pady=(0, 16))
+        tabs.pack(pady=(0, 26))
         for tab_level, name in DIFFICULTY_LEVELS.items():
             chosen = tab_level == level
             RoundedButton(
@@ -878,73 +967,71 @@ class MathsQuiz:
                 width=120,
                 height=38,
                 fill=ACCENT if chosen else CARD,
-                #outline=ACCENT if chosen else BORDER,
                 hover=ACCENT_HOVER if chosen else CARD_HOVER,
-                #hover_outline=ACCENT,
                 text_colour="white" if chosen else MUTED,
             ).pack(side="left", padx=4)
 
-        # Column widths (in pixels) shared by the heading row and every row
-        widths = [60, 220, 100, 110]
-
         entries = self.leaderboard[str(level)]
-        if not entries:
+
+        # the heading and every row share these column widths
+        widths = [50, 220, 100, 110]
+        headings = ["#", "PLAYER", "SCORE", "BEST STREAK"]
+
+        table = tk.Frame(page)
+        table.pack()
+        for column, width in enumerate(widths):
+            table.columnconfigure(column, minsize=width)
+
+        for column, heading in enumerate(headings):
             tk.Label(
-                page, text="No scores yet. Be the first!", fg=MUTED, font=(FONT, 12)
-            ).pack(pady=40)
-        else:
-            heading_row = tk.Frame(page)
-            heading_row.pack(padx=(0, 34))  # lines the headings up with the row text
-            for column, heading in enumerate(["#", "PLAYER", "SCORE", "BEST STREAK"]):
-                heading_row.columnconfigure(column, minsize=widths[column])
-                tk.Label(
-                    heading_row,
-                    text=heading,
-                    font=(FONT, 9, "bold"),
-                    fg=MUTED,
-                    anchor="w",
-                ).grid(row=0, column=column, sticky="w")
+                table,
+                text=heading,
+                font=(FONT, 9, "bold"),
+                fg=MUTED,
+                anchor="w",
+            ).grid(row=0, column=column, sticky="w", pady=(0, 8))
 
-            for position, entry in enumerate(entries, start=1):
-                # The row that was just added gets a purple highlight
-                latest = entry is self.last_entry
-                row_colour = ACCENT if latest else CARD
-                row = Card(
-                    page,
-                    width=540,
-                    height=40,
-                    radius=20,
-                    fill=row_colour,
-                    #outline=ACCENT if latest else BORDER,
-                )
-                row.pack(pady=3)
-
+        # always list MAX_SCORES places, so the screen keeps its size
+        for position in range(1, MAX_SCORES + 1):
+            entry = entries[position - 1] if position <= len(entries) else None
+            if entry is None:
+                values = [position, "-", "-", "-"]
+            else:
                 values = [position, entry["name"], entry["score"], entry["streak"]]
-                for column, value in enumerate(values):
-                    row.body.columnconfigure(column, minsize=widths[column])
-                    colour = WARN if position == 1 and column == 0 else TEXT
-                    tk.Label(
-                        row.body,
-                        text=value,
-                        font=(FONT, 12),
-                        fg=colour,
-                        bg=CARD_HOVER if latest else CARD,
-                        anchor="w",
-                    ).grid(row=0, column=column, sticky="w")
 
-        RoundedButton(page, "Back", back, width=160, height=42).pack(pady=(18, 0))
+            latest = entry is not None and entry is self.last_entry
+            for column, value in enumerate(values):
+                if entry is None:
+                    colour = MUTED
+                elif position == 1 and column == 0:
+                    colour = WARN
+                else:
+                    colour = ACCENT_SOFT if latest else TEXT
+                tk.Label(
+                    table,
+                    text=value,
+                    fg=colour,
+                    anchor="w",
+                    font=(FONT, 13, "bold" if latest else "normal"),
+                ).grid(row=position, column=column, sticky="w", pady=6)
 
-    # Replay and quit
+        RoundedButton(page, "Back", back, width=160, height=48).pack(pady=(30, 0))
+
+        self.drawBackground(page)
+
     def playAgain(self):
+        """Go back to the menu for a new quiz."""
         self.resetQuiz()
         self.displayMenu()
 
     def quitQuiz(self):
+        """Close the application."""
         self.cancelTimer()
         self.root.destroy()
 
 
 def main():
+    """Create the Tkinter root window and start the event loop."""
     root = tk.Tk()
     MathsQuiz(root)
     root.mainloop()
